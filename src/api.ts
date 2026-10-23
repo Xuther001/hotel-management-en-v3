@@ -30,6 +30,7 @@ export const api = {
     return result;
   },
   me: () => request<any>('/auth/me'),
+  logout: () => request<any>('/auth/logout', { method: 'POST' }),
   users: () => request<any>('/admin/users'),
   createUser: (data: {
     username: string;

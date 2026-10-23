@@ -7,7 +7,7 @@ import cors from 'cors';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { randomBytes, scryptSync, timingSafeEqual, createHmac } from 'node:crypto';
+import { randomBytes, scryptSync, timingSafeEqual, createHmac, createHash } from 'node:crypto';
 
 const app = express();
 app.use(cors());
@@ -430,6 +430,7 @@ type AuthUser = {
 
 const authUsersPath = process.env.AUTH_USERS_FILE || path.join(__dirname, 'users.json');
 const authSecretPath = process.env.AUTH_SECRET_FILE || path.join(__dirname, '.auth-secret');
+const sessionsPath = process.env.AUTH_SESSIONS_FILE || path.join(__dirname, 'sessions.json');
 
 function saveAuthUsers(users: AuthUser[]) {
   fs.writeFileSync(authUsersPath, JSON.stringify(users, null, 2), { mode: 0o600 });
@@ -479,10 +480,53 @@ function initializeAuth() {
 
 const authSecret = initializeAuth();
 
+type AuthSession = {
+  sessionHash: string;
+  userId: string;
+  createdAt: string;
+};
+
+function hashSessionId(sessionId: string) {
+  return createHash('sha256').update(sessionId).digest('hex');
+}
+
+function readSessions(): AuthSession[] {
+  if (!fs.existsSync(sessionsPath)) return [];
+  const sessions = JSON.parse(fs.readFileSync(sessionsPath, 'utf8'));
+  if (!Array.isArray(sessions)) {
+    throw new Error('Authentication sessions file is invalid.');
+  }
+  return sessions;
+}
+
+function saveSessions(sessions: AuthSession[]) {
+  fs.writeFileSync(sessionsPath, JSON.stringify(sessions, null, 2), {
+    encoding: 'utf8',
+    mode: 0o600
+  });
+}
+
+function revokeSessionsForUser(userId: string) {
+  saveSessions(readSessions().filter(session => session.userId !== userId));
+}
+
 function makeToken(user: AuthUser) {
+  const sessionId = randomBytes(32).toString('base64url');
+  const sessionHash = hashSessionId(sessionId);
+
+  // Store only a hash of the random session ID on the server.
+  saveSessions([
+    ...readSessions(),
+    {
+      sessionHash,
+      userId: user.id,
+      createdAt: new Date().toISOString()
+    }
+  ]);
+
   const payload = Buffer.from(JSON.stringify({
     sub: user.id,
-    exp: Date.now() + 12 * 60 * 60 * 1000
+    sid: sessionId
   })).toString('base64url');
 
   const signature = createHmac('sha256', authSecret).update(payload).digest('base64url');
@@ -505,8 +549,16 @@ function requireAuthentication(req: express.Request, res: express.Response, next
     }
 
     const payload = JSON.parse(Buffer.from(parts[0], 'base64url').toString('utf8'));
-    if (!payload.sub || !Number.isFinite(payload.exp) || payload.exp <= Date.now()) {
-      return res.status(401).json({ error: 'Your session has expired. Please sign in again.' });
+    if (typeof payload.sub !== 'string' || typeof payload.sid !== 'string') {
+      return res.status(401).json({ error: 'Invalid authentication token.' });
+    }
+
+    const sessionHash = hashSessionId(payload.sid);
+    const session = readSessions().find(
+      item => item.sessionHash === sessionHash && item.userId === payload.sub
+    );
+    if (!session) {
+      return res.status(401).json({ error: 'This session has been signed out. Please sign in again.' });
     }
 
     const user = readAuthUsers().find(u => u.id === payload.sub);
@@ -515,6 +567,7 @@ function requireAuthentication(req: express.Request, res: express.Response, next
     }
 
     (req as any).authUser = publicUser(user);
+    (req as any).authSessionHash = sessionHash;
     next();
   } catch {
     return res.status(401).json({ error: 'Authentication failed. Please sign in again.' });
@@ -551,6 +604,12 @@ app.post('/api/v1/auth/login', (req, res) => {
 
 // Every business API route declared below this point requires authentication.
 app.use('/api/v1', requireAuthentication);
+
+app.post('/api/v1/auth/logout', (req, res) => {
+  const sessionHash = (req as any).authSessionHash as string;
+  saveSessions(readSessions().filter(session => session.sessionHash !== sessionHash));
+  res.json({ message: 'Signed out successfully.' });
+});
 
 app.get('/api/v1/auth/me', (req, res) => {
   res.json({ data: (req as any).authUser });
@@ -619,6 +678,7 @@ app.patch('/api/v1/admin/users/:id/password', requireAdmin, (req, res) => {
   user.salt = randomBytes(16).toString('hex');
   user.passwordHash = hashPassword(password, user.salt);
   saveAuthUsers(users);
+  revokeSessionsForUser(user.id);
   res.json({ message: 'Password updated successfully.' });
 });
 
@@ -637,6 +697,7 @@ app.delete('/api/v1/admin/users/:id', requireAdmin, (req, res) => {
   }
 
   saveAuthUsers(users.filter(u => u.id !== target.id));
+  revokeSessionsForUser(target.id);
   res.json({ message: 'User deleted successfully.' });
 });
 

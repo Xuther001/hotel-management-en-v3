@@ -124,8 +124,12 @@ function App() {
   if (!user) return <LoginScreen onLogin={setUser}/>;
 
   return <AuthenticatedApp user={user} onLogout={() => {
-    clearAuthToken();
-    setUser(null);
+    void api.logout().catch(error => {
+      console.error('Server logout failed:', error);
+    }).finally(() => {
+      clearAuthToken();
+      setUser(null);
+    });
   }}/>;
 }
 
