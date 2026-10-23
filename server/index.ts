@@ -417,27 +417,194 @@ app.get('/api/v1/auth/me', (_req, res) => res.json({ data: { id: 'demo-owner', n
 app.post('/api/v1/auth/login', (_req, res) => res.json({ data: { user: { id: 'demo-owner', name: 'Business Owner', role: 'Owner' }, demo: true, message: 'Demo login only; authentication is not implemented.' } }));
 
 app.get('/api/v1/properties', (_req, res) => res.json({ data: readData().properties }));
+app.get('/api/v1/dashboard/room-popularity', (req, res) => {
+  const d = readData();
+  const selectedId = String(req.query.property_id || 'all');
+  const periodParam = String(req.query.period || '30');
+  const period = ['30', '90', 'all'].includes(periodParam) ? periodParam : '30';
+
+  const properties = (d.properties || []).filter((p: AnyRecord) =>
+    selectedId === 'all' || p.id === selectedId
+  );
+  const propertyIds = new Set(properties.map((p: AnyRecord) => p.id));
+  const rooms = (d.rooms || []).filter((r: AnyRecord) => propertyIds.has(r.propertyId));
+
+  const dateParts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(new Date());
+  const datePart = (type: string) => dateParts.find((part: any) => part.type === type)?.value || '';
+  const today = `${datePart('year')}-${datePart('month')}-${datePart('day')}`;
+  const dayMs = 86400000;
+  const toDay = (value: string) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value || '')) return NaN;
+    const [y, m, day] = value.split('-').map(Number);
+    const ts = Date.UTC(y, m - 1, day);
+    const date = new Date(ts);
+    return date.getUTCFullYear() === y && date.getUTCMonth() === m - 1 &&
+      date.getUTCDate() === day ? ts : NaN;
+  };
+  const todayTs = toDay(today);
+  const tomorrowTs = todayTs + dayMs;
+  const roomByKey = new Map<string, AnyRecord>(
+    rooms.map((room: AnyRecord) => [`${room.propertyId}:${room.number}`, room])
+  );
+
+  const stays = (d.reservations || []).filter((r: AnyRecord) => {
+    if (!propertyIds.has(r.propertyId)) return false;
+    if (!['Checked in', 'Checked out'].includes(r.status)) return false;
+    const room = roomByKey.get(`${r.propertyId}:${r.room}`);
+    const start = toDay(r.checkIn);
+    const end = toDay(r.checkOut);
+    return Boolean(room) && Number.isFinite(start) && Number.isFinite(end) &&
+      start < tomorrowTs && end > start;
+  });
+
+  let startTs = period === 'all'
+    ? (stays.length
+        ? Math.min(...stays.map((r: AnyRecord) => toDay(r.checkIn)))
+        : todayTs)
+    : todayTs - (Number(period) - 1) * dayMs;
+  startTs = Math.min(startTs, todayTs);
+
+  const totals = new Map<string, number>();
+  for (const room of rooms) totals.set(room.id, 0);
+
+  for (const stay of stays) {
+    const room = roomByKey.get(`${stay.propertyId}:${stay.room}`);
+    if (!room) continue;
+    const stayStart = toDay(stay.checkIn);
+    const stayEnd = Math.min(toDay(stay.checkOut), tomorrowTs);
+    const overlapStart = Math.max(stayStart, startTs);
+    const overlapEnd = Math.min(stayEnd, tomorrowTs);
+    if (overlapEnd > overlapStart) {
+      totals.set(room.id, (totals.get(room.id) || 0) +
+        Math.round((overlapEnd - overlapStart) / dayMs));
+    }
+  }
+
+  const roomResults: Array<{
+    id: string;
+    propertyId: string;
+    room: string;
+    occupiedDays: number;
+  }> = rooms.map((room: AnyRecord) => ({
+    id: String(room.id),
+    propertyId: String(room.propertyId),
+    room: String(room.number),
+    occupiedDays: totals.get(String(room.id)) || 0
+  }));
+  const ranked = [...roomResults].sort((a, b) =>
+    b.occupiedDays - a.occupiedDays || a.room.localeCompare(b.room, undefined, { numeric: true })
+  );
+
+  res.json({ data: {
+    period,
+    startDate: new Date(startTs).toISOString().slice(0, 10),
+    endDate: today,
+    rooms: roomResults,
+    totalOccupiedDays: roomResults.reduce((sum: number, room: { occupiedDays: number }) => sum + room.occupiedDays, 0),
+    mostPopular: ranked.length && ranked[0].occupiedDays > 0
+      ? ranked.filter((room: AnyRecord) => room.occupiedDays === ranked[0].occupiedDays)
+      : [],
+    leastPopular: ranked.length
+      ? ranked.filter((room: AnyRecord) => room.occupiedDays === ranked[ranked.length - 1].occupiedDays)
+      : []
+  }});
+});
 app.get('/api/v1/dashboard/overview', (req, res) => {
   const d = readData();
-  const propertyId = String(req.query.property_id || 'all');
-  const properties = propertyId === 'all' ? d.properties : d.properties.filter((p: AnyRecord) => p.id === propertyId);
-  const reservations = propertyId === 'all' ? d.reservations : d.reservations.filter((x: AnyRecord) => x.propertyId === propertyId);
-  const employees = d.employees;
-  const revenue = reservations
-    .filter((r: AnyRecord) => r.status === 'Checked out')
+  const allProperties = d.properties || [];
+  const selectedId = String(req.query.property_id || 'all');
+  const properties = selectedId === 'all'
+    ? allProperties
+    : allProperties.filter((p: AnyRecord) => p.id === selectedId);
+  const propertyIds = new Set(properties.map((p: AnyRecord) => p.id));
+  const allRooms = (d.rooms || []).filter((r: AnyRecord) => propertyIds.has(r.propertyId));
+  const reservations = (d.reservations || []).filter((r: AnyRecord) => propertyIds.has(r.propertyId));
+  const employees = d.employees || [];
+
+  // Use the hotel's local date, regardless of the server's timezone.
+  const dateParts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(new Date());
+  const datePart = (type: string) => dateParts.find((part: any) => part.type === type)?.value || '';
+  const today = `${datePart('year')}-${datePart('month')}-${datePart('day')}`;
+  const currentMonth = today.slice(0, 7);
+
+  // Revenue here means recorded amounts for completed stays by checkout month,
+  // not cash received or the value of future/in-progress bookings.
+  const completed = reservations.filter((r: AnyRecord) =>
+    r.status === 'Checked out' && typeof r.checkOut === 'string'
+  );
+  const revenue = completed
+    .filter((r: AnyRecord) => r.checkOut.slice(0, 7) === currentMonth)
     .reduce((sum: number, r: AnyRecord) => sum + Number(r.amount || 0), 0);
-  const rooms = properties.reduce((s: number, p: AnyRecord) => s + p.rooms, 0);
-  const weighted = properties.reduce((s: number, p: AnyRecord) => s + p.rooms * p.occupancy, 0);
+
+  // Occupancy is based on actual room records; maintenance rooms are excluded.
+  const roomStats = properties.map((p: AnyRecord) => {
+    const propertyRooms = allRooms.filter((r: AnyRecord) => r.propertyId === p.id);
+    const availableRooms = propertyRooms.filter((r: AnyRecord) => r.occupancyStatus !== 'Maintenance');
+    const occupiedRooms = availableRooms.filter((r: AnyRecord) => r.occupancyStatus === 'Occupied').length;
+    return {
+      ...p,
+      rooms: propertyRooms.length,
+      occupancy: availableRooms.length ? Math.round(occupiedRooms / availableRooms.length * 100) : 0
+    };
+  });
+  const availableRooms = allRooms.filter((r: AnyRecord) => r.occupancyStatus !== 'Maintenance');
+  const occupiedRooms = availableRooms.filter((r: AnyRecord) => r.occupancyStatus === 'Occupied').length;
+  const occupancy = availableRooms.length ? Math.round(occupiedRooms / availableRooms.length * 100) : 0;
+
+  // Build the last six months from completed reservation amounts, not sample figures.
+  const monthKeys: string[] = [];
+  const firstOfCurrentMonth = new Date(Number(currentMonth.slice(0, 4)), Number(currentMonth.slice(5, 7)) - 1, 1);
+  for (let offset = 5; offset >= 0; offset--) {
+    const date = new Date(firstOfCurrentMonth.getFullYear(), firstOfCurrentMonth.getMonth() - offset, 1);
+    monthKeys.push(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`);
+  }
+  const firstPropertyId = allProperties[0]?.id;
+  const secondPropertyId = allProperties[1]?.id;
+  const revenueTrend = monthKeys.map((month: string) => {
+    const monthCompleted = completed.filter((r: AnyRecord) => r.checkOut.slice(0, 7) === month);
+    return {
+      month: new Date(`${month}-01T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' }),
+      hotelA: monthCompleted.filter((r: AnyRecord) => r.propertyId === firstPropertyId)
+        .reduce((sum: number, r: AnyRecord) => sum + Number(r.amount || 0), 0) / 1_000_000,
+      hotelB: secondPropertyId
+        ? monthCompleted.filter((r: AnyRecord) => r.propertyId === secondPropertyId)
+            .reduce((sum: number, r: AnyRecord) => sum + Number(r.amount || 0), 0) / 1_000_000
+        : 0
+    };
+  });
+
+  const activeStatuses = new Set(['active', 'employed']);
+  const employeeCount = employees.filter((e: AnyRecord) =>
+    !e.status || activeStatuses.has(String(e.status).toLowerCase())
+  ).length;
+
   res.json({ data: {
-    revenue, operatingProfit: Math.round(revenue * 0.30), occupancy: rooms ? Math.round(weighted / rooms) : 0,
-    employeeCount: employees.length, arrivals: reservations.filter((r: AnyRecord) => r.status === 'Arriving today').length,
-    departures: reservations.filter((r: AnyRecord) => r.checkOut === '2026-10-19').length,
-    properties, reservations: reservations.slice(0, 5), tasks: d.tasks, activity: d.activity,
-    revenueTrend: [
-      { month: 'May', hotelA: 1120, hotelB: 890 }, { month: 'Jun', hotelA: 1180, hotelB: 930 },
-      { month: 'Jul', hotelA: 1320, hotelB: 970 }, { month: 'Aug', hotelA: 1250, hotelB: 1010 },
-      { month: 'Sep', hotelA: 1370, hotelB: 980 }, { month: 'Oct', hotelA: 1400, hotelB: 1000 }
-    ]
+    revenue,
+    // Profit cannot be calculated reliably until same-period expenses and revenue are reconciled.
+    operatingProfit: null,
+    occupancy,
+    employeeCount,
+    arrivals: reservations.filter((r: AnyRecord) =>
+      r.checkIn === today && ['Confirmed', 'Arriving today'].includes(r.status)
+    ).length,
+    departures: reservations.filter((r: AnyRecord) =>
+      r.checkOut === today && !['Checked out', 'Cancelled', 'No-show'].includes(r.status)
+    ).length,
+    properties: roomStats,
+    reservations: reservations.slice(0, 5),
+    tasks: d.tasks || [],
+    activity: d.activity || [],
+    revenueTrend
   }});
 });
 app.get('/api/v1/reservations', (req, res) => res.json(list(readData().reservations, req)));
@@ -1226,7 +1393,7 @@ app.post('/api/v1/backup/email', async (_req, res) => {
 });
 
 app.use('/api', (_req, res) => res.status(404).json({ error: 'Simulated endpoint not implemented yet.' }));
-const port = Number(process.env.PORT || 4000);
+const port = Number(process.env.PORT || 4001);
 app.listen(port, '0.0.0.0', () => {
   console.log(`Hotel management API listening on port ${port}`);
 });

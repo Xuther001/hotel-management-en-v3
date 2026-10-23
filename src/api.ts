@@ -11,6 +11,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 }
 export const api = {
   overview: (propertyId = 'all') => request<any>(`/dashboard/overview?property_id=${propertyId}`),
+  roomPopularity: (propertyId = 'all', period = '30') => request<any>(`/dashboard/room-popularity?property_id=${encodeURIComponent(propertyId)}&period=${encodeURIComponent(period)}`),
   properties: () => request<any>('/properties'),
   reservations: (q = '', propertyId = 'all') => request<any>(`/reservations?q=${encodeURIComponent(q)}&property_id=${encodeURIComponent(propertyId)}`),
   createReservation: (data: any) => request<any>('/reservations', { method: 'POST', body: JSON.stringify(data) }),

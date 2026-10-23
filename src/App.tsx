@@ -89,7 +89,7 @@ function App() {
         
         <Route path="/reports" element={<Reports property={property}/>} />
         <Route path="/settings" element={<SettingsPage />} />
-      </Routes><footer>© 2026 Haven Group <span>Internal management system · Demo data only</span></footer></div>
+      </Routes><footer>© 2026 Haven Group <span>Internal management system · Local API data</span></footer></div>
     </main>
   </div>;
 }
@@ -103,20 +103,42 @@ function Dashboard({ property }: { property: string }) {
   const [data, setData] = useState<AnyRow | null>(null);
   const [error, setError] = useState('');
   const [refresh, setRefresh] = useState(0);
+  const [popularityPeriod, setPopularityPeriod] = useState('30');
+  const [popularity, setPopularity] = useState<AnyRow | null>(null);
+  const [popularityLoading, setPopularityLoading] = useState(true);
+  const [popularityError, setPopularityError] = useState('');
   useEffect(() => { api.overview(property).then(r => {setData(r.data); setError('');}).catch(e => setError(e.message)); }, [property, refresh]);
+  useEffect(() => {
+    let active = true;
+    setPopularityLoading(true);
+    api.roomPopularity(property, popularityPeriod)
+      .then(r => {
+        if (active) {
+          setPopularity(r.data);
+          setPopularityError('');
+        }
+      })
+      .catch(e => {
+        if (active) setPopularityError(e.message || 'Could not load room popularity.');
+      })
+      .finally(() => {
+        if (active) setPopularityLoading(false);
+      });
+    return () => { active = false; };
+  }, [property, popularityPeriod, refresh]);
   if (error) return <ErrorState error={error} retry={() => setRefresh(x => x + 1)}/>;
   if (!data) return <div className="loading"><RefreshCw className="spin"/> Loading dashboard…</div>;
   return <>
-    <PageHeader eyebrow="MONDAY, OCTOBER 19, 2026" title="Good morning, Owner" description="Here’s what’s happening across your businesses today." actions={<><Button variant="secondary" onClick={() => setRefresh(x => x + 1)}><RefreshCw size={15}/> Refresh</Button><Button onClick={() => window.location.href='/reservations'}><Plus size={16}/> New reservation</Button></>}/>
-    <div className="notice demo-notice"><Sparkles size={17}/><div><strong>Demo environment</strong><span>These figures are sample data. Changes you make are stored locally by the simulated API.</span></div><Badge tone="info">SIMULATED API</Badge></div>
+    <PageHeader eyebrow={new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Ho_Chi_Minh", weekday: "long", month: "long", day: "numeric", year: "numeric" }).format(new Date()).toUpperCase()} title={`${Number(new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", hour12: false }).format(new Date())) < 12 ? "Good morning" : Number(new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", hour12: false }).format(new Date())) < 18 ? "Good afternoon" : "Good evening"}, Owner`} description="A live overview based on your saved hotel records." actions={<><Button variant="secondary" onClick={() => setRefresh(x => x + 1)}><RefreshCw size={15}/> Refresh</Button><Button onClick={() => window.location.href='/reservations'}><Plus size={16}/> New reservation</Button></>}/>
+    
     <div className="stat-grid">
-      <StatCard title="Total revenue" value={money(data.revenue)} change="+8.2%" icon={<CircleDollarSign size={19}/>} note="this month"/>
-      <StatCard title="Operating profit" value={money(data.operatingProfit)} change="+5.4%" icon={<ChartNoAxesCombined size={19}/>} note="estimated · 30% margin"/>
-      <StatCard title="Room occupancy" value={`${data.occupancy}%`} change="+3.1%" icon={<BedDouble size={19}/>} note="across selected hotels"/>
-      <StatCard title="Active employees" value={String(data.employeeCount)} icon={<Users size={19}/>} note="across the group"/>
+      <StatCard title="Completed stay revenue" value={money(data.revenue)} icon={<CircleDollarSign size={19}/>} note="completed checkouts this month"/>
+      <StatCard title="Operating profit" value={data.operatingProfit == null ? "—" : money(data.operatingProfit)} icon={<ChartNoAxesCombined size={19}/>} note="unavailable · reconcile expenses"/>
+      <StatCard title="Room occupancy" value={`${data.occupancy}%`} icon={<BedDouble size={19}/>} note="occupied rooms / available rooms"/>
+      <StatCard title="Active employees" value={String(data.employeeCount)} icon={<Users size={19}/>} note="active staff records"/>
     </div>
     <div className="content-grid two-one">
-      <Panel title="Revenue performance" subtitle="Monthly revenue by hotel · VND millions" action={<button className="text-button" onClick={() => window.location.href='/reports'}>View report <ArrowUpRight size={14}/></button>}>
+      <Panel title="Revenue performance" subtitle="Completed stay amounts by checkout month · VND millions" action={<button className="text-button" onClick={() => window.location.href='/reports'}>View report <ArrowUpRight size={14}/></button>}>
         <div className="chart-wrap"><ResponsiveContainer width="100%" height="100%"><AreaChart data={data.revenueTrend} margin={{top:12,right:10,left:0,bottom:0}}><defs><linearGradient id="blueArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#4779ed" stopOpacity={0.18}/><stop offset="95%" stopColor="#4779ed" stopOpacity={0}/></linearGradient></defs><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#edf0f5"/><XAxis dataKey="month" tickLine={false} axisLine={false} tick={{fontSize:11,fill:'#8a94a6'}}/><YAxis tickLine={false} axisLine={false} tick={{fontSize:11,fill:'#8a94a6'}} width={36}/><Tooltip formatter={(v:any) => [`₫${v}M`, 'Revenue']}/><Area type="monotone" dataKey="hotelA" name="Hotel A" stroke="#4779ed" fill="url(#blueArea)" strokeWidth={2.5}/><Area type="monotone" dataKey="hotelB" name="Hotel B" stroke="#25b99a" fill="transparent" strokeWidth={2.5}/></AreaChart></ResponsiveContainer></div>
         <div className="legend"><span><i className="blue-dot"/> Hotel A</span><span><i className="green-dot"/> Hotel B</span></div>
       </Panel>
@@ -125,6 +147,40 @@ function Dashboard({ property }: { property: string }) {
         <div className="property-footer"><span>Combined monthly revenue</span><strong>{money(data.revenue)}</strong></div>
       </Panel>
     </div>
+    <Panel title="Room popularity" subtitle="Actual occupied nights by room · check-out date is exclusive" action={
+      <label className="popularity-period">Period
+        <select value={popularityPeriod} onChange={e => setPopularityPeriod(e.target.value)}>
+          <option value="30">Last 30 days</option>
+          <option value="90">Last 90 days</option>
+          <option value="all">All available history</option>
+        </select>
+      </label>
+    }>
+      {popularityLoading ? <div className="loading popularity-message">Loading room history…</div>
+        : popularityError ? <div className="popularity-message error">{popularityError}</div>
+        : !popularity?.rooms?.length ? <EmptyState title="No rooms in this selection" text="Choose a hotel with rooms to view popularity."/>
+        : <>
+          <div className="popularity-summary">
+            <div><span>Total occupied room-nights</span><strong>{popularity.totalOccupiedDays.toLocaleString()}</strong></div>
+            <div><span>Most popular room{popularity.mostPopular?.length === 1 ? '' : 's'}</span><strong>{popularity.mostPopular?.length ? `${popularity.mostPopular.map((room: AnyRow) => room.room).join(', ')} · ${popularity.mostPopular[0].occupiedDays} days` : 'No stays recorded'}</strong></div>
+            <div><span>Least popular room{popularity.leastPopular?.length === 1 ? '' : 's'}</span><strong>{popularity.leastPopular?.length ? `${popularity.leastPopular.map((room: AnyRow) => room.room).join(', ')} · ${popularity.leastPopular[0].occupiedDays} days` : '—'}</strong></div>
+          </div>
+          <div className="popularity-scroll">
+            <div className="room-popularity-chart" style={{width: `${Math.max(760, popularity.rooms.length * 43)}px`}}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={popularity.rooms} margin={{top:12,right:12,left:0,bottom:58}}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#edf0f5"/>
+                  <XAxis dataKey="room" interval={0} angle={-45} textAnchor="end" height={68} tickLine={false} axisLine={false} tick={{fontSize:10,fill:'#7e899b'}}/>
+                  <YAxis allowDecimals={false} tickLine={false} axisLine={false} width={38} tick={{fontSize:10,fill:'#7e899b'}}/>
+                  <Tooltip formatter={(value: any) => [`${value} ${Number(value) === 1 ? 'night' : 'nights'}`, 'Occupied']} labelFormatter={(label: any) => `Room ${label}`}/>
+                  <Bar dataKey="occupiedDays" name="Occupied nights" fill="#4779ed" radius={[4,4,0,0]} maxBarSize={25}/>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+          <div className="popularity-footnote">Reporting window: {popularity.startDate} to {popularity.endDate}. Confirmed, cancelled, no-show, and future stays are excluded.</div>
+        </>}
+    </Panel>
     <div className="content-grid two-one lower-grid">
       <Panel title="Reservation activity" subtitle="Recent and upcoming bookings" action={<button className="text-button" onClick={() => window.location.href='/reservations'}>All reservations <ArrowUpRight size={14}/></button>}>
         <ReservationTable rows={data.reservations.slice(0,4)} compact/>
@@ -588,7 +644,7 @@ function Reservations({ property }: { property: string }) {
     }
   }
 
-  return <><PageHeader eyebrow="HOTEL OPERATIONS" title="Reservations" description="Manage guest bookings, stay dates, and booking status." actions={<Button onClick={startCreating}><Plus size={16}/> New reservation</Button>}/><div className="toolbar"><SearchBar value={query} onChange={setQuery} placeholder="Search guest, booking ID, source…"/><div className="toolbar-right"><Badge tone="info">{rows.length} bookings</Badge><Button variant="secondary" onClick={load}><RefreshCw size={15}/> Refresh</Button></div></div>{error && <div className="notice error">{error}</div>}<Panel title="All reservations" subtitle="Sample bookings from the simulated API">{loading ? <div className="loading">Loading reservations…</div> : <ReservationTable rows={rows} onStatusChange={changeReservationStatus} onDelete={deleteReservation} onEdit={startEditing}/>}</Panel>{open && <Modal title={editingReservation ? 'Edit reservation' : 'Create reservation'} onClose={() => { setOpen(false); setEditingReservation(null); }}><form key={editingReservation?.id || 'new-reservation'} className="form-grid" onSubmit={submit}><label className="span-2">Guest full name<input name="guest" required defaultValue={editingReservation?.guest || ''} placeholder="Enter guest name"/></label><label>Hotel<select name="propertyId" value={selectedProperty} onChange={e => { setSelectedProperty(e.target.value); setSelectedRoom(""); }}><option value="hotel-a">Hotel A</option><option value="hotel-b">Hotel B</option></select></label><label>Room number<select name="room" required value={selectedRoom} onChange={e => setSelectedRoom(e.target.value)}><option value="">Select an available room</option>{roomOptions.map((room: AnyRow) => <option key={room.id} value={room.number}>{room.number} · {room.type} · Floor {room.floor}</option>)}</select>{roomOptions.length === 0 && <small>No rooms available for these dates.</small>}</label><label>Check-in<input type="date" name="checkIn" required min={editingReservation ? undefined : today} value={checkInDate} onChange={e => setCheckInDate(e.target.value)} /></label><label>Check-out<input type="date" name="checkOut" required min={checkInDate || undefined} value={checkOutDate} onChange={e => setCheckOutDate(e.target.value)} /></label><label>Guests<input type="number" name="guests" min="1" defaultValue={editingReservation?.guests ?? 2}/></label><label>Amount (VND)<input type="number" name="amount" min="0" defaultValue={editingReservation?.amount ?? 1500000}/></label><label className="span-2">Booking source<select name="source" defaultValue={editingReservation?.source || 'Direct'}><option>Direct</option><option>Phone</option><option>Walk-in</option><option>Booking.com</option><option>Agoda</option><option>Travel agent</option></select></label><div className="form-actions span-2"><Button variant="secondary" onClick={() => { setOpen(false); setEditingReservation(null); }}>Cancel</Button><Button type="submit">{editingReservation ? 'Save changes' : 'Create reservation'}</Button></div></form></Modal>}</>;
+  return <><PageHeader eyebrow="HOTEL OPERATIONS" title="Reservations" description="Manage guest bookings, stay dates, and booking status." actions={<Button onClick={startCreating}><Plus size={16}/> New reservation</Button>}/><div className="toolbar"><SearchBar value={query} onChange={setQuery} placeholder="Search guest, booking ID, source…"/><div className="toolbar-right"><Badge tone="info">{rows.length} bookings</Badge><Button variant="secondary" onClick={load}><RefreshCw size={15}/> Refresh</Button></div></div>{error && <div className="notice error">{error}</div>}<Panel title="All reservations" subtitle="Recent bookings from saved records">{loading ? <div className="loading">Loading reservations…</div> : <ReservationTable rows={rows} onStatusChange={changeReservationStatus} onDelete={deleteReservation} onEdit={startEditing}/>}</Panel>{open && <Modal title={editingReservation ? 'Edit reservation' : 'Create reservation'} onClose={() => { setOpen(false); setEditingReservation(null); }}><form key={editingReservation?.id || 'new-reservation'} className="form-grid" onSubmit={submit}><label className="span-2">Guest full name<input name="guest" required defaultValue={editingReservation?.guest || ''} placeholder="Enter guest name"/></label><label>Hotel<select name="propertyId" value={selectedProperty} onChange={e => { setSelectedProperty(e.target.value); setSelectedRoom(""); }}><option value="hotel-a">Hotel A</option><option value="hotel-b">Hotel B</option></select></label><label>Room number<select name="room" required value={selectedRoom} onChange={e => setSelectedRoom(e.target.value)}><option value="">Select an available room</option>{roomOptions.map((room: AnyRow) => <option key={room.id} value={room.number}>{room.number} · {room.type} · Floor {room.floor}</option>)}</select>{roomOptions.length === 0 && <small>No rooms available for these dates.</small>}</label><label>Check-in<input type="date" name="checkIn" required min={editingReservation ? undefined : today} value={checkInDate} onChange={e => setCheckInDate(e.target.value)} /></label><label>Check-out<input type="date" name="checkOut" required min={checkInDate || undefined} value={checkOutDate} onChange={e => setCheckOutDate(e.target.value)} /></label><label>Guests<input type="number" name="guests" min="1" defaultValue={editingReservation?.guests ?? 2}/></label><label>Amount (VND)<input type="number" name="amount" min="0" defaultValue={editingReservation?.amount ?? 1500000}/></label><label className="span-2">Booking source<select name="source" defaultValue={editingReservation?.source || 'Direct'}><option>Direct</option><option>Phone</option><option>Walk-in</option><option>Booking.com</option><option>Agoda</option><option>Travel agent</option></select></label><div className="form-actions span-2"><Button variant="secondary" onClick={() => { setOpen(false); setEditingReservation(null); }}>Cancel</Button><Button type="submit">{editingReservation ? 'Save changes' : 'Create reservation'}</Button></div></form></Modal>}</>;
 }
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
