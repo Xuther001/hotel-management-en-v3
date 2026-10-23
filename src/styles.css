@@ -402,12 +402,55 @@
   }
 
   .sidebar {
-    padding-top: env(safe-area-inset-top);
-    padding-bottom: env(safe-area-inset-bottom);
+    top: 0;
+    bottom: auto;
+    height: 100vh;
+    height: 100dvh;
+    max-height: 100dvh;
+    padding-top: max(12px, env(safe-area-inset-top));
+    padding-bottom: max(10px, env(safe-area-inset-bottom));
+    overflow: hidden;
+  }
+
+  .sidebar > nav {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 12px;
+  }
+
+  .sidebar-bottom {
+    flex: 0 0 auto;
+    margin-top: auto;
+    padding-top: 8px;
+  }
+
+  .help-card {
+    margin-bottom: 10px;
+  }
+
+  .user-mini {
+    flex-shrink: 0;
   }
 
   .scrim {
     touch-action: manipulation;
+  }
+
+  @media (max-height: 620px) {
+    .help-card {
+      display: none;
+    }
+
+    .brand {
+      padding-bottom: 12px;
+    }
+
+    .nav-group {
+      margin-bottom: 12px;
+    }
   }
 
   .table-scroll {
