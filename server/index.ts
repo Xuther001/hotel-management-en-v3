@@ -396,11 +396,21 @@ function activityChanges(
     }));
 }
 
-function addActivity(data: AnyRecord, text: string, details: any[] = []) {
+function activityActor(req: express.Request): string {
+  const user = (req as any).authUser;
+  return String(user?.username || user?.name || 'Unknown user');
+}
+
+function addActivity(
+  data: AnyRecord,
+  text: string,
+  details: any[] = [],
+  by = 'Unknown user'
+) {
   data.activity.unshift({
     id: Date.now() + Math.random(),
     text,
-    by: 'Demo User',
+    by,
     time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     ...(details.length ? { details } : {})
   });
@@ -963,7 +973,7 @@ app.post('/api/v1/reservations', (req, res) => {
     { key: 'status', label: 'Status' },
     { key: 'source', label: 'Booking source' },
     { key: 'amount', label: 'Amount' }
-  ]));
+  ]), activityActor(req));
   writeData(d);
   res.status(201).json({ data: item });
 });
@@ -1085,7 +1095,7 @@ app.patch('/api/v1/reservations/:id', (req, res) => {
         { key: 'housekeepingStatus', label: 'Housekeeping' }
       ]));
       if (automaticRoomChanges.length) {
-        addActivity(d, `Room ${room.number} updated automatically after reservation ${item.id} was ${body.status.toLowerCase()}`, automaticRoomChanges);
+        addActivity(d, `Room ${room.number} updated automatically after reservation ${item.id} was ${body.status.toLowerCase()}`, automaticRoomChanges, activityActor(req));
       }
     }
   }
@@ -1097,7 +1107,8 @@ app.patch('/api/v1/reservations/:id', (req, res) => {
       statusChanged
         ? `Reservation ${item.id} status updated`
         : `Reservation ${item.id} details edited for ${item.guest}`,
-      reservationChanges
+      reservationChanges,
+      activityActor(req)
     );
   }
 
@@ -1123,7 +1134,7 @@ app.delete('/api/v1/reservations/:id', (req, res) => {
     { field: 'Check-in', from: activityValue(d, 'checkIn', deleted.checkIn), to: 'Deleted' },
     { field: 'Check-out', from: activityValue(d, 'checkOut', deleted.checkOut), to: 'Deleted' },
     { field: 'Status', from: activityValue(d, 'status', deleted.status), to: 'Deleted' }
-  ]);
+  ], activityActor(req));
 
   writeData(d);
   res.json({ message: 'Reservation permanently deleted.', data: deleted });
@@ -1208,7 +1219,7 @@ app.patch('/api/v1/rooms/:id/status', async (req, res) => {
     const label = field === 'occupancyStatus' ? 'Occupancy' : 'Housekeeping';
     addActivity(d, `Room ${item.number} ${label.toLowerCase()} updated`, [
       { field: label, from: String(previousValue ?? '(empty)'), to: String(value) }
-    ]);
+    ], activityActor(req));
     writeData(d);
   }
 
@@ -1259,7 +1270,7 @@ app.patch('/api/v1/rooms/:id/note', (req, res) => {
     item.note = req.body.note;
     addActivity(d, `Room ${item.number} notes updated`, [
       { field: 'Room notes', from: previousNote || '(empty)', to: req.body.note || '(empty)' }
-    ]);
+    ], activityActor(req));
     writeData(d);
   }
   res.json({ data: item });
@@ -1458,7 +1469,7 @@ app.post('/api/v1/billing/payments', (req, res) => {
   d.payments.unshift(payment);
   if (!Array.isArray(d.activity)) d.activity = [];
   d.activity.unshift({ id: Date.now(), text: `Payment recorded for reservation ${reservationId}`,
-    by: 'Finance', time: new Date().toISOString().slice(11, 16) });
+    by: activityActor(req), time: new Date().toISOString().slice(11, 16) });
   writeData(d);
   res.status(201).json({ data: payment, billing: getBillingRows(d).find((x: AnyRecord) => x.reservationId === reservationId) });
 });
@@ -1503,7 +1514,7 @@ app.patch('/api/v1/billing/payments/:paymentId', (req, res) => {
   d.activity.unshift({
     id: Date.now(),
     text: `Payment ${payment.id} edited for ${payment.reservationId}: amount ${before.amount} -> ${payment.amount}; date ${before.date} -> ${payment.date}; method ${before.method} -> ${payment.method}`,
-    by: 'Finance',
+    by: activityActor(req),
     time: new Date().toISOString().slice(11, 16)
   });
 
@@ -1530,7 +1541,7 @@ app.delete('/api/v1/billing/payments/:paymentId', (req, res) => {
   d.activity.unshift({
     id: Date.now(),
     text: `Payment ${payment.id} deleted for reservation ${payment.reservationId}: ${payment.amount} VND`,
-    by: 'Finance',
+    by: activityActor(req),
     time: new Date().toISOString().slice(11, 16)
   });
 
