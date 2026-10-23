@@ -1004,45 +1004,138 @@ function getBillingRows(d: AnyRecord) {
   const today = new Date().toISOString().slice(0, 10);
   const settings = Array.isArray(d.billingSettings) ? d.billingSettings : [];
   const payments = Array.isArray(d.payments) ? d.payments : [];
+
   return (d.reservations || [])
     .filter((r: AnyRecord) => !['Cancelled', 'No-show'].includes(String(r.status || '')))
     .map((r: AnyRecord) => {
       const cfg = settings.find((x: AnyRecord) => x.reservationId === r.id) || {};
       const rentalType = cfg.rentalType === 'Monthly' ? 'Monthly' : 'Daily';
       const monthlyRate = Math.max(0, Number(cfg.monthlyRate || 0));
-      const segments: any[] = [];
-      let charge = 0;
+      const installments: AnyRecord[] = [];
+
       if (rentalType === 'Daily') {
-        charge = Math.max(0, Number(r.amount || 0));
-        segments.push({ dueDate: String(r.checkIn || today) });
+        const amount = Math.max(0, Number(r.amount || 0));
+        installments.push({
+          dueDate: String(r.checkIn || today),
+          charge: amount,
+          paid: 0,
+          balance: amount
+        });
       } else if (monthlyRate > 0 && r.checkIn && r.checkOut) {
         const start = new Date(`${r.checkIn}T00:00:00Z`).getTime();
         const end = new Date(`${r.checkOut}T00:00:00Z`).getTime();
         const nightsByMonth: Record<string, number> = {};
+
+        // Count each overnight stay; the checkout date is excluded.
         for (let t = start; t < end; t += 86400000) {
           const month = new Date(t).toISOString().slice(0, 7);
           nightsByMonth[month] = (nightsByMonth[month] || 0) + 1;
         }
+
         for (const [month, nights] of Object.entries(nightsByMonth)) {
           const [year, monthNo] = month.split('-').map(Number);
           const days = new Date(Date.UTC(year, monthNo, 0)).getUTCDate();
-          charge += Math.round(monthlyRate / days * nights);
-          segments.push({ dueDate: `${month}-05` });
+          const amount = Math.round(monthlyRate / days * nights);
+          const fifth = `${month}-05`;
+
+          // For a first month that begins after the 5th, the prorated
+          // first installment is due at check-in rather than retroactively.
+          const dueDate = month === String(r.checkIn).slice(0, 7) && fifth < String(r.checkIn)
+            ? String(r.checkIn)
+            : fifth;
+
+          installments.push({
+            dueDate,
+            charge: amount,
+            paid: 0,
+            balance: amount
+          });
         }
       }
-      const reservationPayments = payments.filter((x: AnyRecord) => x.reservationId === r.id);
-      const paid = reservationPayments.reduce((sum: number, x: AnyRecord) => sum + Math.max(0, Number(x.amount || 0)), 0);
-      const balance = Math.max(0, charge - paid);
-      const dueDate = segments.map(x => x.dueDate).sort()[0] || String(r.checkIn || today);
-      const status = rentalType === 'Monthly' && monthlyRate <= 0 ? 'Setup needed'
-        : balance <= 0 ? 'Paid' : dueDate < today ? 'Overdue' : 'Due';
-      return { reservationId: r.id, guest: r.guest, room: r.room, propertyId: r.propertyId,
-        checkIn: r.checkIn, checkOut: r.checkOut, reservationStatus: r.status,
-        rentalType, monthlyRate, charge, paid, balance, dueDate, status, payments: reservationPayments };
-    })
-    .sort((a: AnyRecord, b: AnyRecord) => String(a.dueDate).localeCompare(String(b.dueDate)));
-}
 
+      installments.sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)));
+
+      const reservationPayments = payments
+        .filter((x: AnyRecord) => x.reservationId === r.id)
+        .sort((a: AnyRecord, b: AnyRecord) =>
+          String(a.date || '').localeCompare(String(b.date || ''))
+        );
+
+      const paid = reservationPayments.reduce(
+        (sum: number, x: AnyRecord) => sum + Math.max(0, Number(x.amount || 0)),
+        0
+      );
+
+      // Apply each recorded payment to the oldest outstanding installment first.
+      for (const payment of reservationPayments) {
+        let remaining = Math.max(0, Number(payment.amount || 0));
+        for (const installment of installments) {
+          if (remaining <= 0) break;
+          const applied = Math.min(installment.balance, remaining);
+          installment.paid += applied;
+          installment.balance -= applied;
+          remaining -= applied;
+        }
+      }
+
+      const charge = installments.reduce((sum, x) => sum + x.charge, 0);
+      const balance = Math.max(0, charge - paid);
+      const dueNow = installments.reduce(
+        (sum, x) => sum + (x.dueDate <= today ? x.balance : 0), 0
+      );
+      const overdueAmount = installments.reduce(
+        (sum, x) => sum + (x.dueDate < today ? x.balance : 0), 0
+      );
+
+      for (const installment of installments) {
+        installment.status = installment.balance <= 0
+          ? 'Paid'
+          : installment.dueDate < today
+            ? 'Overdue'
+            : installment.dueDate === today
+              ? 'Due'
+              : 'Upcoming';
+      }
+
+      const dueDate = installments.find(x => x.balance > 0)?.dueDate
+        || installments[0]?.dueDate
+        || String(r.checkIn || today);
+
+      const status = charge <= 0
+        ? 'Setup needed'
+        : balance <= 0
+          ? 'Paid'
+          : overdueAmount > 0
+            ? 'Overdue'
+            : dueNow > 0
+              ? 'Due'
+              : 'Upcoming';
+
+      return {
+        reservationId: r.id,
+        guest: r.guest,
+        room: r.room,
+        propertyId: r.propertyId,
+        checkIn: r.checkIn,
+        checkOut: r.checkOut,
+        reservationStatus: r.status,
+        rentalType,
+        monthlyRate,
+        charge,
+        paid,
+        balance,
+        dueNow,
+        overdueAmount,
+        dueDate,
+        status,
+        installments,
+        payments: reservationPayments
+      };
+    })
+    .sort((a: AnyRecord, b: AnyRecord) =>
+      String(a.dueDate).localeCompare(String(b.dueDate))
+    );
+}
 app.get('/api/v1/billing', (_req, res) => {
   const d = readData();
   res.json({ data: getBillingRows(d), payments: Array.isArray(d.payments) ? d.payments : [] });
@@ -1083,6 +1176,86 @@ app.post('/api/v1/billing/payments', (req, res) => {
     by: 'Finance', time: new Date().toISOString().slice(11, 16) });
   writeData(d);
   res.status(201).json({ data: payment, billing: getBillingRows(d).find((x: AnyRecord) => x.reservationId === reservationId) });
+});
+
+
+app.patch('/api/v1/billing/payments/:paymentId', (req, res) => {
+  const d = readData();
+  const payment = (Array.isArray(d.payments) ? d.payments : [])
+    .find((x: AnyRecord) => x.id === req.params.paymentId);
+
+  if (!payment) return res.status(404).json({ error: 'Payment not found' });
+
+  const amount = Number(req.body.amount);
+  const date = String(req.body.date || '');
+  const method = String(req.body.method || '').trim();
+
+  if (!Number.isFinite(amount) || amount <= 0)
+    return res.status(400).json({ error: 'Payment amount must be greater than zero.' });
+
+  const parsedDate = new Date(`${date}T00:00:00.000Z`);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)
+      || Number.isNaN(parsedDate.getTime())
+      || parsedDate.toISOString().slice(0, 10) !== date)
+    return res.status(400).json({ error: 'Enter a valid payment date.' });
+
+  if (!method || method.length > 80)
+    return res.status(400).json({ error: 'Enter a valid payment method.' });
+
+  const before = {
+    amount: payment.amount,
+    date: payment.date,
+    method: payment.method,
+    notes: payment.notes || ''
+  };
+
+  payment.amount = Math.round(amount);
+  payment.date = date;
+  payment.method = method;
+  payment.notes = String(req.body.notes ?? payment.notes ?? '').slice(0, 500);
+
+  if (!Array.isArray(d.activity)) d.activity = [];
+  d.activity.unshift({
+    id: Date.now(),
+    text: `Payment ${payment.id} edited for ${payment.reservationId}: amount ${before.amount} -> ${payment.amount}; date ${before.date} -> ${payment.date}; method ${before.method} -> ${payment.method}`,
+    by: 'Finance',
+    time: new Date().toISOString().slice(11, 16)
+  });
+
+  writeData(d);
+  res.json({
+    data: payment,
+    billing: getBillingRows(d).find((x: AnyRecord) => x.reservationId === payment.reservationId)
+  });
+});
+
+
+app.delete('/api/v1/billing/payments/:paymentId', (req, res) => {
+  const d = readData();
+  const payments = Array.isArray(d.payments) ? d.payments : [];
+  const index = payments.findIndex(
+    (x: AnyRecord) => x.id === req.params.paymentId
+  );
+
+  if (index < 0) return res.status(404).json({ error: 'Payment not found' });
+
+  const [payment] = payments.splice(index, 1);
+
+  if (!Array.isArray(d.activity)) d.activity = [];
+  d.activity.unshift({
+    id: Date.now(),
+    text: `Payment ${payment.id} deleted for reservation ${payment.reservationId}: ${payment.amount} VND`,
+    by: 'Finance',
+    time: new Date().toISOString().slice(11, 16)
+  });
+
+  writeData(d);
+  res.json({
+    data: payment,
+    billing: getBillingRows(d).find(
+      (x: AnyRecord) => x.reservationId === payment.reservationId
+    )
+  });
 });
 
 app.get('/api/v1/housekeeping/tasks', (_req, res) => res.json({ data: readData().tasks }));

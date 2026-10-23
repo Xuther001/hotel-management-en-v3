@@ -945,9 +945,10 @@ function Finance() {
   const [bills,setBills] = useState<AnyRow[]>([]);
   const [query,setQuery] = useState('');
   const [open,setOpen] = useState(false);
-  const [view,setView] = useState<'expenses'|'billing'>('expenses');
-  const [modal,setModal] = useState<'configure'|'payment'|null>(null);
+  const [view,setView] = useState<'expenses'|'billing'>('billing');
+  const [modal,setModal] = useState<'configure'|'payment'|'editPayment'|null>(null);
   const [selected,setSelected] = useState<AnyRow|null>(null);
+  const [selectedPayment,setSelectedPayment] = useState<AnyRow|null>(null);
   const [error,setError] = useState('');
   const today = new Date().toISOString().slice(0,10);
   const load=()=>api.expenses(query).then(r=>setRows(r.data)).catch(()=>{});
@@ -957,30 +958,70 @@ function Finance() {
   async function submit(e:FormEvent<HTMLFormElement>){e.preventDefault();const f=new FormData(e.currentTarget);await api.createExpense({description:f.get('description'),category:f.get('category'),property:f.get('property'),amount:f.get('amount'),date:f.get('date')});setOpen(false);load();}
   async function saveConfig(e:FormEvent<HTMLFormElement>){e.preventDefault();if(!selected)return;const f=new FormData(e.currentTarget);try{await api.updateBillingSettings(selected.reservationId,{rentalType:f.get('rentalType'),monthlyRate:f.get('monthlyRate')});setModal(null);setSelected(null);setError('');loadBills();}catch(err:any){setError(err.message||'Could not save settings.');}}
   async function savePayment(e:FormEvent<HTMLFormElement>){e.preventDefault();if(!selected)return;const f=new FormData(e.currentTarget);try{await api.recordPayment({reservationId:selected.reservationId,amount:f.get('amount'),date:f.get('date'),method:f.get('method'),notes:f.get('notes')});setModal(null);setSelected(null);setError('');loadBills();}catch(err:any){setError(err.message||'Could not record payment.');}}
+  async function deletePayment(p:AnyRow){
+    const confirmed = window.confirm(
+      `Delete payment ${p.id} for ${p.reservationId} (${money(p.amount)})?\n\nThis cannot be undone. The reservation and its charges will remain unchanged.`
+    );
+    if(!confirmed)return;
+    setError('');
+    try{
+      await api.deletePayment(p.id);
+      await loadBills();
+    }catch(err:any){
+      setError(err.message||'Could not delete payment.');
+      window.alert(err.message||'Could not delete payment.');
+    }
+  }
+  async function saveEditedPayment(e:FormEvent<HTMLFormElement>){
+    e.preventDefault();
+    if(!selectedPayment)return;
+    const f=new FormData(e.currentTarget);
+    try{
+      await api.updatePayment(selectedPayment.id,{
+        amount:f.get('amount'),
+        date:f.get('date'),
+        method:f.get('method'),
+        notes:f.get('notes')
+      });
+      setModal(null);
+      setSelectedPayment(null);
+      setError('');
+      await loadBills();
+    }catch(err:any){
+      setError(err.message||'Could not update payment.');
+    }
+  }
   const total=rows.reduce((s,r)=>s+Number(r.amount||0),0);
   const charges=bills.reduce((s,r)=>s+Number(r.charge||0),0), paid=bills.reduce((s,r)=>s+Number(r.paid||0),0), balance=bills.reduce((s,r)=>s+Number(r.balance||0),0);
+  const dueNow=bills.reduce((s,r)=>s+Number(r.dueNow||0),0), overdueAmount=bills.reduce((s,r)=>s+Number(r.overdueAmount||0),0);
+  const monthlyInstallments=bills.flatMap(r=>(r.rentalType==='Monthly'?(r.installments||[]).map((i:any)=>({...i,reservationId:r.reservationId,guest:r.guest,room:r.room})):[])).sort((a,b)=>String(a.dueDate).localeCompare(String(b.dueDate)));
   return <>
     <PageHeader eyebrow="FINANCE" title="Finance & expenses" description="Track operating expenses, guest charges, payments, and outstanding balances." actions={view==='expenses'?<Button onClick={()=>setOpen(true)}><Plus size={16}/> Record expense</Button>:undefined}/>
-    <div className="toolbar"><Button variant={view==='expenses'?'primary':'secondary'} onClick={()=>setView('expenses')}>Expenses</Button><Button variant={view==='billing'?'primary':'secondary'} onClick={()=>setView('billing')}>Guest billing</Button></div>
+    <div className="toolbar finance-tabs"><Button variant={view==='billing'?'primary':'secondary'} onClick={()=>setView('billing')}>Guest billing</Button><Button variant={view==='expenses'?'primary':'secondary'} onClick={()=>setView('expenses')}>Expenses</Button></div>
     {view==='expenses'?<>
       <div className="mini-stat-grid"><div><span>Total expenses</span><strong>{money(total)}</strong></div><div><span>Awaiting approval</span><strong>{rows.filter(r=>r.status==='Pending').length}</strong></div><div><span>Approved</span><strong>{rows.filter(r=>r.status==='Approved').length}</strong></div><div><span>Records</span><strong>{rows.length}</strong></div></div>
       <div className="toolbar"><SearchBar value={query} onChange={setQuery} placeholder="Search expense records…"/></div>
       <Panel title="Expense register" subtitle="Existing expense records are preserved"><div className="table-scroll"><table><thead><tr><th>DATE / REFERENCE</th><th>DESCRIPTION</th><th>CATEGORY</th><th>PROPERTY</th><th>STATUS</th><th>AMOUNT</th></tr></thead><tbody>{rows.map(r=><tr key={r.id}><td><strong>{r.date}</strong><span className="cell-sub">{r.id}</span></td><td>{r.description}</td><td>{r.category}</td><td>{r.property}</td><td><Badge tone={r.status==='Approved'?'success':'warning'}>{r.status}</Badge></td><td className="amount-cell">{money(r.amount)}</td></tr>)}</tbody></table></div></Panel>
     </>:<>
-      <div className="mini-stat-grid"><div><span>Guest charges</span><strong>{money(charges)}</strong></div><div><span>Payments recorded</span><strong>{money(paid)}</strong></div><div><span>Outstanding balance</span><strong>{money(balance)}</strong></div><div><span>Overdue accounts</span><strong>{bills.filter(r=>r.status==='Overdue').length}</strong></div></div>
+      <div className="mini-stat-grid"><div><span>Guest charges</span><strong>{money(charges)}</strong></div><div><span>Payments recorded</span><strong>{money(paid)}</strong></div><div><span>Outstanding balance</span><strong>{money(balance)}</strong></div><div><span>Due now</span><strong>{money(dueNow)}</strong></div><div><span>Overdue amount</span><strong>{money(overdueAmount)}</strong></div><div><span>Overdue accounts</span><strong>{bills.filter(r=>r.overdueAmount>0).length}</strong></div></div>
       <div className="notice"><AlertTriangle size={17}/><div><strong>Billing rules</strong><span>Daily stays use the existing reservation amount and are due on check-in. Monthly stays are prorated by actual calendar-month days and due by the 5th. Check-in night counts; checkout date does not. Existing reservations default to Daily, and no booking is assumed paid.</span></div></div>
-      <Panel title="Guest billing register" subtitle="Billing settings and payments are stored separately from reservations."><div className="table-scroll"><table><thead><tr><th>RESERVATION / GUEST</th><th>ROOM</th><th>TYPE</th><th>STAY</th><th>CHARGES</th><th>PAID</th><th>BALANCE</th><th>DUE DATE</th><th>STATUS</th><th>ACTIONS</th></tr></thead><tbody>
-        {bills.map(r=><tr key={r.reservationId}><td><strong>{r.reservationId}</strong><span className="cell-sub">{r.guest}</span></td><td>{r.room}</td><td>{r.rentalType}{r.rentalType==='Monthly'&&r.monthlyRate>0?<span className="cell-sub">{money(r.monthlyRate)}/month</span>:null}</td><td>{r.checkIn}<span className="cell-sub">to {r.checkOut}</span></td><td className="amount-cell">{money(r.charge)}</td><td className="amount-cell">{money(r.paid)}</td><td className="amount-cell"><strong>{money(r.balance)}</strong></td><td>{r.dueDate}</td><td><Badge tone={r.status==='Paid'?'success':r.status==='Overdue'||r.status==='Setup needed'?'warning':'neutral'}>{r.status}</Badge></td><td><div className="table-actions"><Button variant="secondary" onClick={()=>{setSelected(r);setError('');setModal('configure');}}>Configure</Button><Button onClick={()=>{setSelected(r);setError('');setModal('payment');}} disabled={r.status==='Setup needed'}>Record payment</Button></div></td></tr>)}
-        {!bills.length&&<tr><td colSpan={10}>No billable reservations found.</td></tr>}
+      <Panel title="Guest billing register" subtitle="Billing settings and payments are stored separately from reservations."><div className="table-scroll"><table><thead><tr><th>RESERVATION / GUEST</th><th>ROOM</th><th>TYPE</th><th>STAY</th><th>CHARGES</th><th>PAID</th><th>BALANCE</th><th>DUE NOW</th><th>OVERDUE</th><th>OLDEST UNPAID DUE DATE</th><th>STATUS</th><th>ACTIONS</th></tr></thead><tbody>
+        {bills.map(r=><tr key={r.reservationId}><td><strong>{r.reservationId}</strong><span className="cell-sub">{r.guest}</span></td><td>{r.room}</td><td>{r.rentalType}{r.rentalType==='Monthly'&&r.monthlyRate>0?<span className="cell-sub">{money(r.monthlyRate)}/month</span>:null}</td><td>{r.checkIn}<span className="cell-sub">to {r.checkOut}</span></td><td className="amount-cell">{money(r.charge)}</td><td className="amount-cell">{money(r.paid)}</td><td className="amount-cell"><strong>{money(r.balance)}</strong></td><td className="amount-cell">{money(r.dueNow)}</td><td className="amount-cell">{money(r.overdueAmount)}</td><td>{r.dueDate}</td><td><Badge tone={r.status==='Paid'?'success':r.status==='Overdue'||r.status==='Setup needed'?'warning':'neutral'}>{r.status}</Badge></td><td><div className="table-actions"><Button variant="secondary" onClick={()=>{setSelected(r);setError('');setModal('configure');}}>Configure</Button><Button onClick={()=>{setSelected(r);setError('');setModal('payment');}} disabled={r.status==='Setup needed'}>Record payment</Button></div></td></tr>)}
+        {!bills.length&&<tr><td colSpan={12}>No billable reservations found.</td></tr>}
       </tbody></table></div></Panel>
-      <Panel title="Payment history" subtitle="Actual recorded payments; existing bookings have no assumed payments."><div className="table-scroll"><table><thead><tr><th>DATE / PAYMENT</th><th>RESERVATION</th><th>METHOD</th><th>NOTES</th><th>AMOUNT</th></tr></thead><tbody>
-        {bills.flatMap(r=>(r.payments||[]).map((p:AnyRow)=>({...p,guest:r.guest}))).sort((a,b)=>String(b.date).localeCompare(String(a.date))).map((p:AnyRow)=><tr key={p.id}><td><strong>{p.date}</strong><span className="cell-sub">{p.id}</span></td><td>{p.reservationId}<span className="cell-sub">{p.guest}</span></td><td>{p.method}</td><td>{p.notes||'—'}</td><td className="amount-cell">{money(p.amount)}</td></tr>)}
-        {!bills.some(r=>(r.payments||[]).length>0)&&<tr><td colSpan={5}>No payments recorded yet.</td></tr>}
+      <Panel title="Monthly installment breakdown" subtitle="Each monthly charge is prorated by calendar days. Recorded payments are allocated to the oldest installment first."><div className="table-scroll"><table><thead><tr><th>DUE DATE</th><th>RESERVATION / GUEST</th><th>ROOM</th><th>CHARGE</th><th>ALLOCATED PAID</th><th>REMAINING</th><th>STATUS</th></tr></thead><tbody>
+        {monthlyInstallments.map((i:any)=><tr key={`${i.reservationId}-${i.dueDate}`}><td>{i.dueDate}</td><td><strong>{i.reservationId}</strong><span className="cell-sub">{i.guest}</span></td><td>{i.room}</td><td className="amount-cell">{money(i.charge)}</td><td className="amount-cell">{money(i.paid)}</td><td className="amount-cell"><strong>{money(i.balance)}</strong></td><td><Badge tone={i.status==='Paid'?'success':i.status==='Overdue'?'warning':i.status==='Due'?'neutral':'info'}>{i.status}</Badge></td></tr>)}
+        {!monthlyInstallments.length&&<tr><td colSpan={7}>No monthly installments configured.</td></tr>}
+      </tbody></table></div></Panel>
+      <Panel title="Payment history" subtitle="Actual recorded payments; existing bookings have no assumed payments."><div className="table-scroll"><table><thead><tr><th>DATE / PAYMENT</th><th>RESERVATION</th><th>METHOD</th><th>NOTES</th><th>AMOUNT</th><th>ACTIONS</th></tr></thead><tbody>
+        {bills.flatMap(r=>(r.payments||[]).map((p:AnyRow)=>({...p,guest:r.guest}))).sort((a,b)=>String(b.date).localeCompare(String(a.date))).map((p:AnyRow)=><tr key={p.id}><td><strong>{p.date}</strong><span className="cell-sub">{p.id}</span></td><td>{p.reservationId}<span className="cell-sub">{p.guest}</span></td><td>{p.method}</td><td>{p.notes||'—'}</td><td className="amount-cell">{money(p.amount)}</td><td><button type="button" className="reservation-edit-btn" onClick={()=>{setSelectedPayment(p);setError('');setModal('editPayment');}}>Edit</button><span className="payment-delete-button"><Button variant="secondary" onClick={()=>deletePayment(p)}>Delete</Button></span></td></tr>)}
+        {!bills.some(r=>(r.payments||[]).length>0)&&<tr><td colSpan={6}>No payments recorded yet.</td></tr>}
       </tbody></table></div></Panel>
     </>}
     {open&&<Modal title="Record an expense" onClose={()=>setOpen(false)}><form className="form-grid" onSubmit={submit}><label className="span-2">Description<input name="description" required placeholder="What was purchased or paid for?"/></label><label>Category<select name="category"><option>Utilities</option><option>Supplies</option><option>Maintenance</option><option>Payroll</option><option>Marketing</option><option>Other</option></select></label><label>Business unit<select name="property"><option>Hotel A</option><option>Hotel B</option></select></label><label>Amount (VND)<input type="number" name="amount" min="1" required/></label><label>Date<input type="date" name="date" defaultValue={today}/></label><div className="form-actions span-2"><Button variant="secondary" onClick={()=>setOpen(false)}>Cancel</Button><Button type="submit">Save expense</Button></div></form></Modal>}
     {modal==='configure'&&selected&&<Modal title={`Billing settings · ${selected.reservationId}`} onClose={()=>{setModal(null);setSelected(null);setError('');}}><form className="form-grid" onSubmit={saveConfig}><p className="span-2">Guest: <strong>{selected.guest}</strong>, room {selected.room}. Reservation amount and dates will not be changed.</p><label className="span-2">Rental type<select name="rentalType" defaultValue={selected.rentalType}><option value="Daily">Daily — existing reservation amount</option><option value="Monthly">Monthly — calendar-day proration</option></select></label><label className="span-2">Monthly rent (VND)<input name="monthlyRate" type="number" min="1" defaultValue={selected.monthlyRate||''} placeholder="Required for monthly stays"/></label>{error&&<p className="span-2">{error}</p>}<div className="form-actions span-2"><Button variant="secondary" onClick={()=>{setModal(null);setSelected(null);}}>Cancel</Button><Button type="submit">Save settings</Button></div></form></Modal>}
     {modal==='payment'&&selected&&<Modal title={`Record payment · ${selected.reservationId}`} onClose={()=>{setModal(null);setSelected(null);setError('');}}><form className="form-grid" onSubmit={savePayment}><p className="span-2">Guest: <strong>{selected.guest}</strong>. Balance: <strong>{money(selected.balance)}</strong></p><label>Amount (VND)<input name="amount" type="number" min="1" max={Math.max(1,selected.balance)} defaultValue={selected.balance>0?selected.balance:''} required/></label><label>Payment date<input name="date" type="date" defaultValue={today} required/></label><label>Method<select name="method"><option>Cash</option><option>Bank transfer</option><option>Card</option><option>Other</option></select></label><label>Notes<input name="notes" maxLength={500} placeholder="Optional reference"/></label>{error&&<p className="span-2">{error}</p>}<div className="form-actions span-2"><Button variant="secondary" onClick={()=>{setModal(null);setSelected(null);}}>Cancel</Button><Button type="submit">Save payment</Button></div></form></Modal>}
+    {modal==='editPayment'&&selectedPayment&&<Modal title={`Edit payment · ${selectedPayment.id}`} onClose={()=>{setModal(null);setSelectedPayment(null);setError('');}}><form className="form-grid" onSubmit={saveEditedPayment}><p className="span-2">Reservation: <strong>{selectedPayment.reservationId}</strong>. Editing updates this payment rather than creating a new one.</p><label>Amount (VND)<input name="amount" type="number" min="1" step="1" defaultValue={selectedPayment.amount} required/></label><label>Payment date<input name="date" type="date" defaultValue={selectedPayment.date} required/></label><label>Method<select name="method" defaultValue={selectedPayment.method}><option>Cash</option><option>Bank transfer</option><option>Card</option><option>Other</option></select></label><label>Notes<input name="notes" maxLength={500} defaultValue={selectedPayment.notes||''} placeholder="Optional reference"/></label>{error&&<p className="span-2">{error}</p>}<div className="form-actions span-2"><Button variant="secondary" onClick={()=>{setModal(null);setSelectedPayment(null);setError('');}}>Cancel</Button><Button type="submit">Save changes</Button></div></form></Modal>}
   </>;
 }
 function Maintenance() {
