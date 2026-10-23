@@ -13,3 +13,7 @@ tsconfig.tsbuildinfo
 server/data.json
 server/data.json.local-backup
 server/push-subscriptions.json
+
+# Private authentication files
+server/users.json
+server/.auth-secret

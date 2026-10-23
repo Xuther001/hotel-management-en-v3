@@ -1,15 +1,55 @@
 const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
 export const API_URL = `${API_BASE}/api/v1`;
+const AUTH_TOKEN_KEY = 'hotel_auth_token';
+
+export function clearAuthToken() {
+  localStorage.removeItem(AUTH_TOKEN_KEY);
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const token = localStorage.getItem(AUTH_TOKEN_KEY);
   const response = await fetch(`${API_URL}${path}`, {
     ...options,
-    headers: { 'Content-Type': 'application/json', ...(options?.headers || {}) }
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(options?.headers || {})
+    }
   });
   const body = await response.json();
   if (!response.ok) throw new Error(body.error || 'Request failed');
   return body;
 }
 export const api = {
+  login: async (username: string, password: string) => {
+    const result = await request<any>('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ username, password })
+    });
+    localStorage.setItem(AUTH_TOKEN_KEY, result.data.token);
+    return result;
+  },
+  me: () => request<any>('/auth/me'),
+  users: () => request<any>('/admin/users'),
+  createUser: (data: {
+    username: string;
+    name: string;
+    password: string;
+    role: string;
+    propertyIds: string[];
+  }) => request<any>('/admin/users', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  }),
+  resetUserPassword: (id: string, password: string) =>
+    request<any>(`/admin/users/${encodeURIComponent(id)}/password`, {
+      method: 'PATCH',
+      body: JSON.stringify({ password })
+    }),
+  deleteUser: (id: string) =>
+    request<any>(`/admin/users/${encodeURIComponent(id)}`, {
+      method: 'DELETE'
+    }),
   overview: (propertyId = 'all') => request<any>(`/dashboard/overview?property_id=${propertyId}`),
   roomPopularity: (propertyId = 'all', period = '30') => request<any>(`/dashboard/room-popularity?property_id=${encodeURIComponent(propertyId)}&period=${encodeURIComponent(period)}`),
   properties: () => request<any>('/properties'),

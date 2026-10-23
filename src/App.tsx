@@ -7,9 +7,16 @@ import {
   UserRound, CalendarCheck, ClipboardList, FileText, CircleDollarSign, Sparkles
 } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, AreaChart, Area } from 'recharts';
-import { api, money, API_URL } from './api';
+import { api, money, API_URL, clearAuthToken } from './api';
 
 type AnyRow = Record<string, any>;
+type AuthUser = {
+  id: string;
+  username: string;
+  name: string;
+  role: string;
+  propertyIds?: string[];
+};
 const navGroups = [
   { label: 'WORKSPACE', items: [
     { to: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -46,7 +53,83 @@ function Panel({ title, subtitle, action, children }: { title: string; subtitle?
 function EmptyState({ title, text }: { title: string; text: string }) {
   return <div className="empty"><ClipboardList size={24}/><strong>{title}</strong><span>{text}</span></div>;
 }
+
+function LoginScreen({ onLogin }: { onLogin: (user: AuthUser) => void }) {
+  const [username, setUsername] = useState('admin');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (busy) return;
+    setBusy(true);
+    setError('');
+    try {
+      const result = await api.login(username.trim(), password);
+      onLogin(result.data.user as AuthUser);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Sign-in failed. Please try again.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return <div className="auth-screen">
+    <form className="auth-card" onSubmit={submit}>
+      <div className="auth-brand"><div className="brand-mark"><Building2 size={22}/></div>
+        <div><strong>Haven Group</strong><span>HOTEL MANAGEMENT</span></div>
+      </div>
+      <h1>Welcome back</h1>
+      <p>Sign in to access your hotel management workspace.</p>
+      <label htmlFor="login-username">Username</label>
+      <input id="login-username" autoComplete="username" value={username}
+        onChange={e => setUsername(e.target.value)} required />
+      <label htmlFor="login-password">Password</label>
+      <input id="login-password" type="password" autoComplete="current-password"
+        value={password} onChange={e => setPassword(e.target.value)} required />
+      {error && <div className="auth-error" role="alert">{error}</div>}
+      <button className="button primary auth-submit" type="submit" disabled={busy}>
+        {busy ? 'Signing in…' : 'Sign in'}
+      </button>
+      <span className="auth-footnote">Authorized staff only</span>
+    </form>
+  </div>;
+}
+
 function App() {
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    api.me()
+      .then(result => {
+        if (active) setUser(result.data as AuthUser);
+      })
+      .catch(() => {
+        clearAuthToken();
+        if (active) setUser(null);
+      })
+      .finally(() => {
+        if (active) setAuthChecked(true);
+      });
+    return () => { active = false; };
+  }, []);
+
+  if (!authChecked) {
+    return <div className="auth-screen"><div className="loading"><RefreshCw className="spin"/> Checking sign-in…</div></div>;
+  }
+
+  if (!user) return <LoginScreen onLogin={setUser}/>;
+
+  return <AuthenticatedApp user={user} onLogout={() => {
+    clearAuthToken();
+    setUser(null);
+  }}/>;
+}
+
+function AuthenticatedApp({ user, onLogout }: { user: AuthUser; onLogout: () => void }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [property, setProperty] = useState('all');
   const [properties, setProperties] = useState<AnyRow[]>([]);
@@ -72,11 +155,11 @@ function App() {
       <div className="brand"><div className="brand-mark"><Building2 size={20}/></div><div><strong>Haven Group</strong><span>BUSINESS MANAGEMENT</span></div><button className="icon-button mobile-close" onClick={() => setSidebarOpen(false)}><X size={18}/></button></div>
       <div className="workspace-select"><div className="workspace-icon"><Building2 size={17}/></div><div><span>WORKSPACE</span><strong>Hospitality Group</strong></div><ChevronDown size={15}/></div>
       <nav>{navGroups.map(group => <div className="nav-group" key={group.label}><span className="nav-label">{group.label}</span>{group.items.map(item => { const Icon = item.icon; return <NavLink end={item.to === '/'} to={item.to} key={item.to} onClick={() => setSidebarOpen(false)} className={({isActive}) => `nav-link ${isActive ? 'active' : ''}`}><Icon size={18}/><span>{item.label}</span>{item.to === '/reservations' && <small className="nav-count">{reservationCount === null ? "—" : reservationCount}</small>}</NavLink>; })}</div>)}</nav>
-      <div className="sidebar-bottom"><div className="help-card"><div className="help-icon"><Sparkles size={16}/></div><strong>Need a hand?</strong><p>Your internal management workspace is in demo mode.</p><button onClick={() => alert('This is a frontend demo. Add a help module when your backend is ready.')}>View help <ArrowUpRight size={14}/></button></div><div className="user-mini"><div className="avatar">BO</div><div><strong>Business Owner</strong><span>Administrator · Demo</span></div><button className="icon-button" title="Account"><LogOut size={16}/></button></div></div>
+      <div className="sidebar-bottom"><div className="help-card"><div className="help-icon"><Sparkles size={16}/></div><strong>Need a hand?</strong><p>Your internal management workspace is in demo mode.</p><button onClick={() => alert('This is a frontend demo. Add a help module when your backend is ready.')}>View help <ArrowUpRight size={14}/></button></div><div className="user-mini"><div className="avatar">{user.name.slice(0, 2).toUpperCase()}</div><div><strong>{user.name}</strong><span>{user.role}</span></div><button className="icon-button" title="Sign out" onClick={onLogout}><LogOut size={16}/></button></div></div>
     </aside>
     {sidebarOpen && <button className="scrim" onClick={() => setSidebarOpen(false)} aria-label="Close navigation"/>}
     <main className="main-area">
-      <header className="topbar"><div className="top-left"><button className="icon-button mobile-menu" onClick={() => setSidebarOpen(true)}><Menu size={20}/></button><div className="breadcrumbs">Workspace <span>/</span> <strong>{pageTitle}</strong></div></div><div className="top-actions"><label className="property-filter"><Building2 size={16}/><select value={property} onChange={e => setProperty(e.target.value)}><option value="all">All hotels</option>{properties.map(p => <option value={p.id} key={p.id}>{p.name}</option>)}</select><ChevronDown size={14}/></label><button className="icon-button top-search" onClick={() => document.getElementById('global-search')?.focus()} title="Search"><Search size={18}/></button><button className="icon-button notification" title="Notifications" onClick={() => alert('Demo notifications: 3 maintenance tasks and 2 contract renewals require attention.')}><Bell size={18}/><i/></button><div className="top-divider"/><div className="top-user"><div className="avatar">BO</div><div><strong>Business Owner</strong><span>Owner account</span></div><ChevronDown size={14}/></div></div></header>
+      <header className="topbar"><div className="top-left"><button className="icon-button mobile-menu" onClick={() => setSidebarOpen(true)}><Menu size={20}/></button><div className="breadcrumbs">Workspace <span>/</span> <strong>{pageTitle}</strong></div></div><div className="top-actions"><label className="property-filter"><Building2 size={16}/><select value={property} onChange={e => setProperty(e.target.value)}><option value="all">All hotels</option>{properties.map(p => <option value={p.id} key={p.id}>{p.name}</option>)}</select><ChevronDown size={14}/></label><button className="icon-button top-search" onClick={() => document.getElementById('global-search')?.focus()} title="Search"><Search size={18}/></button><button className="icon-button notification" title="Notifications" onClick={() => alert('Demo notifications: 3 maintenance tasks and 2 contract renewals require attention.')}><Bell size={18}/><i/></button><div className="top-divider"/><div className="top-user"><div className="avatar">{user.name.slice(0, 2).toUpperCase()}</div><div><strong>{user.name}</strong><span>{user.role}</span></div><ChevronDown size={14}/></div></div></header>
       <div className="page-wrap"><Routes>
         <Route path="/" element={<Dashboard property={property}/>} />
         <Route path="/reservations" element={<Reservations property={property} />} />
@@ -1005,15 +1088,15 @@ function Finance() {
     </>:<>
       <div className="mini-stat-grid"><div><span>Guest charges</span><strong>{money(charges)}</strong></div><div><span>Payments recorded</span><strong>{money(paid)}</strong></div><div><span>Outstanding balance</span><strong>{money(balance)}</strong></div><div><span>Due now</span><strong>{money(dueNow)}</strong></div><div><span>Overdue amount</span><strong>{money(overdueAmount)}</strong></div><div><span>Overdue accounts</span><strong>{bills.filter(r=>r.overdueAmount>0).length}</strong></div></div>
       <div className="notice"><AlertTriangle size={17}/><div><strong>Billing rules</strong><span>Daily stays use the existing reservation amount and are due on check-in. Monthly stays are prorated by actual calendar-month days and due by the 5th. Check-in night counts; checkout date does not. Existing reservations default to Daily, and no booking is assumed paid.</span></div></div>
-      <Panel title="Guest billing register" subtitle="Billing settings and payments are stored separately from reservations."><div className="table-scroll"><table><thead><tr><th>RESERVATION / GUEST</th><th>ROOM</th><th>TYPE</th><th>STAY</th><th>CHARGES</th><th>PAID</th><th>BALANCE</th><th>DUE NOW</th><th>OVERDUE</th><th>OLDEST UNPAID DUE DATE</th><th>STATUS</th><th>ACTIONS</th></tr></thead><tbody>
-        {bills.map(r=><tr key={r.reservationId}><td><strong>{r.reservationId}</strong><span className="cell-sub">{r.guest}</span></td><td>{r.room}</td><td>{r.rentalType}{r.rentalType==='Monthly'&&r.monthlyRate>0?<span className="cell-sub">{money(r.monthlyRate)}/month</span>:null}</td><td>{r.checkIn}<span className="cell-sub">to {r.checkOut}</span></td><td className="amount-cell">{money(r.charge)}</td><td className="amount-cell">{money(r.paid)}</td><td className="amount-cell"><strong>{money(r.balance)}</strong></td><td className="amount-cell">{money(r.dueNow)}</td><td className="amount-cell">{money(r.overdueAmount)}</td><td>{r.dueDate}</td><td><Badge tone={r.status==='Paid'?'success':r.status==='Overdue'||r.status==='Setup needed'?'warning':'neutral'}>{r.status}</Badge></td><td><div className="table-actions"><Button variant="secondary" onClick={()=>{setSelected(r);setError('');setModal('configure');}}>Configure</Button><Button onClick={()=>{setSelected(r);setError('');setModal('payment');}} disabled={r.status==='Setup needed'}>Record payment</Button></div></td></tr>)}
+      <Panel title="Guest billing register" subtitle="Billing settings and payments are stored separately from reservations."><div className="table-scroll billing-register-scroll"><table className="billing-register-table"><thead><tr><th>RESERVATION / GUEST</th><th>ROOM</th><th>TYPE</th><th>STAY</th><th>CHARGES</th><th>PAID</th><th>BALANCE</th><th>DUE NOW</th><th>OVERDUE</th><th>OLDEST UNPAID DUE DATE</th><th>STATUS</th><th>ACTIONS</th></tr></thead><tbody>
+        {bills.map(r=><tr key={r.reservationId}><td><strong>{r.reservationId}</strong><span className="cell-sub">{r.guest}</span><details className="billing-mobile-details"><summary>View details</summary><div className="billing-mobile-detail-content"><span><strong>Stay:</strong> {r.checkIn} to {r.checkOut}</span><span><strong>Overdue:</strong> {money(r.overdueAmount)}</span><span><strong>Oldest unpaid due date:</strong> {r.dueDate || '—'}</span></div></details></td><td>{r.room}</td><td>{r.rentalType}{r.rentalType==='Monthly'&&r.monthlyRate>0?<span className="cell-sub">{money(r.monthlyRate)}/month</span>:null}</td><td>{r.checkIn}<span className="cell-sub">to {r.checkOut}</span></td><td className="amount-cell">{money(r.charge)}</td><td className="amount-cell">{money(r.paid)}</td><td className="amount-cell"><strong>{money(r.balance)}</strong></td><td className="amount-cell">{money(r.dueNow)}</td><td className="amount-cell">{money(r.overdueAmount)}</td><td>{r.dueDate}</td><td><Badge tone={r.status==='Paid'?'success':r.status==='Overdue'||r.status==='Setup needed'?'warning':'neutral'}>{r.status}</Badge></td><td><div className="table-actions"><Button variant="secondary" onClick={()=>{setSelected(r);setError('');setModal('configure');}}>Configure</Button><Button onClick={()=>{setSelected(r);setError('');setModal('payment');}} disabled={r.status==='Setup needed'}>Record payment</Button></div></td></tr>)}
         {!bills.length&&<tr><td colSpan={12}>No billable reservations found.</td></tr>}
       </tbody></table></div></Panel>
-      <Panel title="Monthly installment breakdown" subtitle="Each monthly charge is prorated by calendar days. Recorded payments are allocated to the oldest installment first."><div className="table-scroll"><table><thead><tr><th>DUE DATE</th><th>RESERVATION / GUEST</th><th>ROOM</th><th>CHARGE</th><th>ALLOCATED PAID</th><th>REMAINING</th><th>STATUS</th></tr></thead><tbody>
+      <Panel title="Monthly installment breakdown" subtitle="Each monthly charge is prorated by calendar days. Recorded payments are allocated to the oldest installment first."><div className="table-scroll installment-breakdown-scroll"><table className="installment-breakdown-table"><thead><tr><th>DUE DATE</th><th>RESERVATION / GUEST</th><th>ROOM</th><th>CHARGE</th><th>ALLOCATED PAID</th><th>REMAINING</th><th>STATUS</th></tr></thead><tbody>
         {monthlyInstallments.map((i:any)=><tr key={`${i.reservationId}-${i.dueDate}`}><td>{i.dueDate}</td><td><strong>{i.reservationId}</strong><span className="cell-sub">{i.guest}</span></td><td>{i.room}</td><td className="amount-cell">{money(i.charge)}</td><td className="amount-cell">{money(i.paid)}</td><td className="amount-cell"><strong>{money(i.balance)}</strong></td><td><Badge tone={i.status==='Paid'?'success':i.status==='Overdue'?'warning':i.status==='Due'?'neutral':'info'}>{i.status}</Badge></td></tr>)}
         {!monthlyInstallments.length&&<tr><td colSpan={7}>No monthly installments configured.</td></tr>}
       </tbody></table></div></Panel>
-      <Panel title="Payment history" subtitle="Actual recorded payments; existing bookings have no assumed payments."><div className="table-scroll"><table><thead><tr><th>DATE / PAYMENT</th><th>RESERVATION</th><th>METHOD</th><th>NOTES</th><th>AMOUNT</th><th>ACTIONS</th></tr></thead><tbody>
+      <Panel title="Payment history" subtitle="Actual recorded payments; existing bookings have no assumed payments."><div className="table-scroll payment-history-scroll"><table className="payment-history-table"><thead><tr><th>DATE / PAYMENT</th><th>RESERVATION</th><th>METHOD</th><th>NOTES</th><th>AMOUNT</th><th>ACTIONS</th></tr></thead><tbody>
         {bills.flatMap(r=>(r.payments||[]).map((p:AnyRow)=>({...p,guest:r.guest}))).sort((a,b)=>String(b.date).localeCompare(String(a.date))).map((p:AnyRow)=><tr key={p.id}><td><strong>{p.date}</strong><span className="cell-sub">{p.id}</span></td><td>{p.reservationId}<span className="cell-sub">{p.guest}</span></td><td>{p.method}</td><td>{p.notes||'—'}</td><td className="amount-cell">{money(p.amount)}</td><td><button type="button" className="reservation-edit-btn" onClick={()=>{setSelectedPayment(p);setError('');setModal('editPayment');}}>Edit</button><span className="payment-delete-button"><Button variant="secondary" onClick={()=>deletePayment(p)}>Delete</Button></span></td></tr>)}
         {!bills.some(r=>(r.payments||[]).length>0)&&<tr><td colSpan={6}>No payments recorded yet.</td></tr>}
       </tbody></table></div></Panel>
@@ -1033,6 +1116,7 @@ function Reports({property}:{property:string}) {
   return <><PageHeader eyebrow="BUSINESS INTELLIGENCE" title="Reports & analytics" description="Explore the performance indicators used in the owner dashboard." actions={<Button variant="secondary" onClick={()=>window.print()}><FileText size={16}/> Print report</Button>}/><div className="stat-grid"><StatCard title="Revenue" value={money(data?.revenue||0)} icon={<CircleDollarSign size={19}/>} note="sample month"/><StatCard title="Operating profit" value={money(data?.operatingProfit||0)} icon={<ChartNoAxesCombined size={19}/>} note="illustrative estimate"/><StatCard title="Occupancy" value={`${data?.occupancy||0}%`} icon={<BedDouble size={19}/>} note="selected properties"/><StatCard title="Staff" value={String(data?.employeeCount||0)} icon={<Users size={19}/>} note="group-wide sample"/></div><Panel title="Revenue comparison" subtitle="VND millions · sample values"><div className="chart-wrap tall"><ResponsiveContainer width="100%" height="100%"><BarChart data={data?.revenueTrend||[]} margin={{top:12,right:10,left:0,bottom:0}}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#edf0f5"/><XAxis dataKey="month" tickLine={false} axisLine={false}/><YAxis tickLine={false} axisLine={false}/><Tooltip/><Bar dataKey="hotelA" name="Hotel A" fill="#4779ed" radius={[5,5,0,0]}/><Bar dataKey="hotelB" name="Hotel B" fill="#25b99a" radius={[5,5,0,0]}/></BarChart></ResponsiveContainer></div></Panel><div className="notice"><AlertTriangle size={17}/><div><strong>Reporting note</strong><span>Operating profit is a demonstration estimate, not a formal accounting calculation. Connect verified transactions and accounting rules before relying on reports.</span></div></div></>;
 }
 function SettingsPage() {
+  const [selectedSection, setSelectedSection] = useState('');
   const [backupState, setBackupState] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
   const [backupMessage, setBackupMessage] = useState('');
 
@@ -1049,6 +1133,8 @@ function SettingsPage() {
       setBackupMessage(error instanceof Error ? error.message : 'Backup email failed.');
     }
   }
+
+  if (selectedSection === "users") return <UserManagement onBack={() => setSelectedSection("")}/>;
 
   return <><PageHeader eyebrow="ADMINISTRATION" title="Settings" description="Configure how your business management system is organized."/><div className="backup-panel">
       <div className="backup-copy">
@@ -1071,8 +1157,190 @@ function SettingsPage() {
         </Button>
       </div>
       {backupMessage && <p className={`backup-message ${backupState}`} role="status">{backupMessage}</p>}
-    </div><div className="settings-grid">{[{icon:<Building2/>,title:'Business & properties',text:'Manage hotels, business units, addresses, and operating settings.'},{icon:<Users/>,title:'Users & permissions',text:'Manage user accounts, roles, and property access.'},{icon:<Wallet/>,title:'Finance configuration',text:'Set currencies, expense categories, and approval thresholds.'},{icon:<Bell/>,title:'Notifications',text:'Choose which alerts and reminders are sent to each role.'},{icon:<FileText/>,title:'Documents & policies',text:'Configure document categories and retention policies.'},{icon:<Settings/>,title:'System preferences',text:'Language, time zone, date format, and application preferences.'}].map((s,i)=><button className="settings-card" key={i} onClick={()=>alert('Settings UI placeholder. This module will be connected to its API in a later iteration.')}><div className="settings-icon">{s.icon}</div><strong>{s.title}</strong><span>{s.text}</span><ArrowUpRight size={16}/></button>)}</div><div className="notice demo-notice"><AlertTriangle size={17}/><div><strong>Prototype security</strong><span>Demo mode does not implement real authentication or authorization. Do not enter real personal, payroll, or financial data.</span></div></div></>;
+    </div><div className="settings-grid">{[{icon:<Building2/>,title:'Business & properties',text:'Manage hotels, business units, addresses, and operating settings.'},{icon:<Users/>,title:'Users & permissions',text:'Manage user accounts, roles, and property access.'},{icon:<Wallet/>,title:'Finance configuration',text:'Set currencies, expense categories, and approval thresholds.'},{icon:<Bell/>,title:'Notifications',text:'Choose which alerts and reminders are sent to each role.'},{icon:<FileText/>,title:'Documents & policies',text:'Configure document categories and retention policies.'},{icon:<Settings/>,title:'System preferences',text:'Language, time zone, date format, and application preferences.'}].map((s,i)=><button className="settings-card" key={i} onClick={()=>{if(s.title==='Users & permissions')setSelectedSection('users');else alert('This settings module has not been connected yet.');}}><div className="settings-icon">{s.icon}</div><strong>{s.title}</strong><span>{s.text}</span><ArrowUpRight size={16}/></button>)}</div><div className="notice demo-notice"><AlertTriangle size={17}/><div><strong>Prototype security</strong><span>Demo mode does not implement real authentication or authorization. Do not enter real personal, payroll, or financial data.</span></div></div></>;
 }
+
+function UserManagement({ onBack }: { onBack: () => void }) {
+  const [users, setUsers] = useState<AnyRow[]>([]);
+  const [properties, setProperties] = useState<AnyRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [propertyIds, setPropertyIds] = useState<string[]>(['all']);
+
+  async function loadUsers() {
+    setLoading(true);
+    try {
+      const [userResult, propertyResult] = await Promise.all([
+        api.users(),
+        api.properties()
+      ]);
+      setUsers(userResult.data || []);
+      setProperties(propertyResult.data || []);
+      setError('');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not load accounts.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { void loadUsers(); }, []);
+
+  async function createAccount(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (busy) return;
+
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    const data = {
+      username: String(form.get('username') || '').trim().toLowerCase(),
+      name: String(form.get('name') || '').trim(),
+      password: String(form.get('password') || ''),
+      role: String(form.get('role') || 'Receptionist'),
+      propertyIds: propertyIds.includes('all') ? ['all'] : propertyIds
+    };
+
+    setBusy(true);
+    setError('');
+    setNotice('');
+
+    try {
+      await api.createUser(data);
+      formElement.reset();
+      setPropertyIds(['all']);
+      setNotice('Account created successfully.');
+      await loadUsers();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not create account.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function resetPassword(user: AnyRow) {
+    const password = window.prompt(
+      `Enter a new password for ${user.username}. Use at least 8 characters:`
+    );
+    if (password === null) return;
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters.');
+      return;
+    }
+
+    setError('');
+    setNotice('');
+    try {
+      await api.resetUserPassword(user.id, password);
+      setNotice(`Password updated for ${user.username}.`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not reset password.');
+    }
+  }
+
+  async function deleteAccount(user: AnyRow) {
+    if (!window.confirm(`Delete the account "${user.username}"? This cannot be undone.`)) return;
+
+    setError('');
+    setNotice('');
+    try {
+      await api.deleteUser(user.id);
+      setNotice(`Account "${user.username}" deleted.`);
+      await loadUsers();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not delete account.');
+    }
+  }
+
+  function toggleProperty(id: string, checked: boolean) {
+    if (id === 'all') {
+      setPropertyIds(checked ? ['all'] : []);
+      return;
+    }
+    setPropertyIds(current => {
+      const next = current.filter(value => value !== 'all');
+      return checked ? [...next, id] : next.filter(value => value !== id);
+    });
+  }
+
+  function propertyLabel(user: AnyRow) {
+    if (!user.propertyIds?.length || user.propertyIds.includes('all')) return 'All hotels';
+    return user.propertyIds
+      .map((id: string) => properties.find(p => p.id === id)?.name || id)
+      .join(', ');
+  }
+
+  return <>
+    <PageHeader
+      eyebrow="ADMINISTRATION"
+      title="Users & permissions"
+      description="Create staff accounts, assign roles, and manage account passwords."
+      actions={<Button variant="secondary" onClick={onBack}>Back to settings</Button>}
+    />
+
+    {error && <div className="notice auth-error-panel" role="alert"><AlertTriangle size={17}/><div><strong>Action failed</strong><span>{error}</span></div></div>}
+    {notice && <div className="notice auth-success-panel" role="status"><CheckCircle2 size={17}/><div><strong>Success</strong><span>{notice}</span></div></div>}
+
+    <div className="user-admin-grid">
+      <Panel title="Create staff account" subtitle="Usernames must be unique. Passwords must contain at least 8 characters.">
+        <form className="user-create-form" onSubmit={createAccount}>
+          <label>Full name<input name="name" required minLength={2} maxLength={100} placeholder="e.g. Nguyen Van An"/></label>
+          <label>Username<input name="username" required minLength={3} maxLength={32} pattern="[A-Za-z0-9._-]+" autoComplete="off" placeholder="e.g. receptionist01"/></label>
+          <label>Temporary password<input name="password" type="password" required minLength={8} maxLength={200} autoComplete="new-password" placeholder="At least 8 characters"/></label>
+          <label>Role
+            <select name="role" defaultValue="Receptionist">
+              <option value="Admin">Admin</option>
+              <option value="Manager">Manager</option>
+              <option value="Receptionist">Receptionist</option>
+              <option value="Housekeeping">Housekeeping</option>
+              <option value="Finance">Finance</option>
+            </select>
+          </label>
+          <fieldset className="user-property-fieldset">
+            <legend>Assigned hotels</legend>
+            <label className="user-property-option">
+              <input type="checkbox" checked={propertyIds.includes('all')} onChange={e => toggleProperty('all', e.target.checked)}/>
+              All hotels
+            </label>
+            {properties.map(p => <label className="user-property-option" key={p.id}>
+              <input type="checkbox" checked={propertyIds.includes(p.id)} onChange={e => toggleProperty(p.id, e.target.checked)}/>
+              {p.name}
+            </label>)}
+            <span className="field-help">Assignments are saved, but hotel-specific API restrictions are not yet enforced.</span>
+          </fieldset>
+          <Button type="submit" disabled={busy}>{busy ? 'Creating account…' : 'Create account'}</Button>
+        </form>
+      </Panel>
+
+      <Panel title="Existing accounts" subtitle={`${users.length} account${users.length === 1 ? '' : 's'} configured`}
+        action={<button className="text-button" onClick={() => void loadUsers()}><RefreshCw size={14}/> Refresh</button>}>
+        {loading ? <div className="loading"><RefreshCw className="spin"/> Loading accounts…</div> :
+          users.length === 0 ? <EmptyState title="No accounts found" text="Create an account to get started."/> :
+          <div className="user-list">
+            {users.map(user => <div className="user-row" key={user.id}>
+              <div className="user-row-avatar">{String(user.name || user.username).slice(0, 2).toUpperCase()}</div>
+              <div className="user-row-info">
+                <strong>{user.name}</strong>
+                <span>@{user.username}</span>
+                <span className="user-row-meta">{user.role} · {propertyLabel(user)}</span>
+              </div>
+              <div className="user-row-actions">
+                <button className="button secondary small" onClick={() => void resetPassword(user)}>Reset password</button>
+                <button className="button danger small" onClick={() => void deleteAccount(user)}>Delete</button>
+              </div>
+            </div>)}
+          </div>
+        }
+      </Panel>
+    </div>
+    <div className="notice demo-notice"><AlertTriangle size={17}/><div>
+      <strong>Access-control limitation</strong>
+      <span>Login and account administration are active. Hotel assignments are currently stored for reference, but do not yet restrict which hotel data a signed-in staff member can access. Complete backend authorization before public production use.</span>
+    </div></div>
+  </>;
+}
+
 function ComingSoon({title,description,icon}:{title:string;description:string;icon:ReactNode}) {
   return <><PageHeader eyebrow="BUSINESS OPERATIONS" title={title} description={description}/><div className="coming-card"><div className="coming-icon">{icon}</div><h2>Module foundation is ready</h2><p>This section is included in the navigation and can be built next. Its production endpoints and workflows have not yet been implemented in the simulated API.</p><Button onClick={()=>alert('This module is on the implementation roadmap.')}>View implementation roadmap <ArrowUpRight size={15}/></Button></div></>;
 }

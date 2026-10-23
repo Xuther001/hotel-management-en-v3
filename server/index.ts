@@ -7,6 +7,7 @@ import cors from 'cors';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { randomBytes, scryptSync, timingSafeEqual, createHmac } from 'node:crypto';
 
 const app = express();
 app.use(cors());
@@ -412,9 +413,232 @@ function list<T extends AnyRecord>(items: T[], req: express.Request) {
     (!propertyId || x.propertyId === propertyId || x.property === propertyId || propertyId === 'all'));
   return { data: filtered, total: filtered.length };
 }
-app.get('/api/v1/health', (_req, res) => res.json({ status: 'ok', mode: 'simulated-api', warning: 'Demo data only' }));
-app.get('/api/v1/auth/me', (_req, res) => res.json({ data: { id: 'demo-owner', name: 'Business Owner', role: 'Owner', permissions: ['*'] } }));
-app.post('/api/v1/auth/login', (_req, res) => res.json({ data: { user: { id: 'demo-owner', name: 'Business Owner', role: 'Owner' }, demo: true, message: 'Demo login only; authentication is not implemented.' } }));
+app.get('/api/v1/health', (_req, res) =>
+  res.json({ status: 'ok', mode: 'authenticated-api' })
+);
+
+type AuthUser = {
+  id: string;
+  username: string;
+  name: string;
+  role: string;
+  propertyIds: string[];
+  salt: string;
+  passwordHash: string;
+  createdAt: string;
+};
+
+const authUsersPath = process.env.AUTH_USERS_FILE || path.join(__dirname, 'users.json');
+const authSecretPath = process.env.AUTH_SECRET_FILE || path.join(__dirname, '.auth-secret');
+
+function saveAuthUsers(users: AuthUser[]) {
+  fs.writeFileSync(authUsersPath, JSON.stringify(users, null, 2), { mode: 0o600 });
+}
+
+function hashPassword(password: string, salt: string) {
+  return scryptSync(password, salt, 64).toString('hex');
+}
+
+function publicUser(user: AuthUser) {
+  return {
+    id: user.id,
+    username: user.username,
+    name: user.name,
+    role: user.role,
+    propertyIds: user.propertyIds,
+    createdAt: user.createdAt
+  };
+}
+
+function readAuthUsers(): AuthUser[] {
+  if (!fs.existsSync(authUsersPath)) {
+    throw new Error('Authentication users file is missing.');
+  }
+  const users = JSON.parse(fs.readFileSync(authUsersPath, 'utf8'));
+  if (!Array.isArray(users)) {
+    throw new Error('Authentication users file is invalid.');
+  }
+  return users;
+}
+
+function initializeAuth() {
+  // Fail closed: never create an account with a hard-coded default password.
+  // The existing users file must be provisioned securely before startup.
+  readAuthUsers();
+
+  if (!fs.existsSync(authSecretPath)) {
+    fs.writeFileSync(authSecretPath, randomBytes(48).toString('hex'), { mode: 0o600, flag: 'wx' });
+  }
+
+  const secret = fs.readFileSync(authSecretPath, 'utf8').trim();
+  if (!secret) {
+    throw new Error('Authentication secret file is empty.');
+  }
+  return secret;
+}
+
+const authSecret = initializeAuth();
+
+function makeToken(user: AuthUser) {
+  const payload = Buffer.from(JSON.stringify({
+    sub: user.id,
+    exp: Date.now() + 12 * 60 * 60 * 1000
+  })).toString('base64url');
+
+  const signature = createHmac('sha256', authSecret).update(payload).digest('base64url');
+  return `${payload}.${signature}`;
+}
+
+function requireAuthentication(req: express.Request, res: express.Response, next: express.NextFunction) {
+  try {
+    const header = req.headers.authorization || '';
+    const token = header.startsWith('Bearer ') ? header.slice(7) : '';
+    const parts = token.split('.');
+    if (parts.length !== 2) {
+      return res.status(401).json({ error: 'Please sign in to continue.' });
+    }
+
+    const expected = createHmac('sha256', authSecret).update(parts[0]).digest();
+    const actual = Buffer.from(parts[1], 'base64url');
+    if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) {
+      return res.status(401).json({ error: 'Invalid authentication token.' });
+    }
+
+    const payload = JSON.parse(Buffer.from(parts[0], 'base64url').toString('utf8'));
+    if (!payload.sub || !Number.isFinite(payload.exp) || payload.exp <= Date.now()) {
+      return res.status(401).json({ error: 'Your session has expired. Please sign in again.' });
+    }
+
+    const user = readAuthUsers().find(u => u.id === payload.sub);
+    if (!user) {
+      return res.status(401).json({ error: 'This account is no longer available.' });
+    }
+
+    (req as any).authUser = publicUser(user);
+    next();
+  } catch {
+    return res.status(401).json({ error: 'Authentication failed. Please sign in again.' });
+  }
+}
+
+function requireAdmin(req: express.Request, res: express.Response, next: express.NextFunction) {
+  if ((req as any).authUser?.role !== 'Admin') {
+    return res.status(403).json({ error: 'Admin permission is required.' });
+  }
+  next();
+}
+
+app.post('/api/v1/auth/login', (req, res) => {
+  const username = String(req.body?.username || '').trim().toLowerCase();
+  const password = String(req.body?.password || '');
+  if (!username || !password) {
+    return res.status(400).json({ error: 'Enter your username and password.' });
+  }
+
+  const user = readAuthUsers().find(u => u.username.toLowerCase() === username);
+  if (!user) {
+    return res.status(401).json({ error: 'Invalid username or password.' });
+  }
+
+  const candidate = Buffer.from(hashPassword(password, user.salt), 'hex');
+  const stored = Buffer.from(user.passwordHash, 'hex');
+  if (candidate.length !== stored.length || !timingSafeEqual(candidate, stored)) {
+    return res.status(401).json({ error: 'Invalid username or password.' });
+  }
+
+  res.json({ data: { user: publicUser(user), token: makeToken(user) } });
+});
+
+// Every business API route declared below this point requires authentication.
+app.use('/api/v1', requireAuthentication);
+
+app.get('/api/v1/auth/me', (req, res) => {
+  res.json({ data: (req as any).authUser });
+});
+
+app.get('/api/v1/admin/users', requireAdmin, (_req, res) => {
+  res.json({ data: readAuthUsers().map(publicUser) });
+});
+
+app.post('/api/v1/admin/users', requireAdmin, (req, res) => {
+  const username = String(req.body?.username || '').trim().toLowerCase();
+  const name = String(req.body?.name || '').trim();
+  const password = String(req.body?.password || '');
+  const role = String(req.body?.role || 'Receptionist');
+  const allowedRoles = ['Admin', 'Manager', 'Receptionist', 'Housekeeping', 'Finance'];
+
+  if (!/^[a-z0-9._-]{3,32}$/.test(username)) {
+    return res.status(400).json({ error: 'Username must be 3–32 characters using letters, numbers, dots, underscores, or hyphens.' });
+  }
+  if (name.length < 2 || name.length > 100) {
+    return res.status(400).json({ error: 'Enter a name between 2 and 100 characters.' });
+  }
+  if (password.length < 8 || password.length > 200) {
+    return res.status(400).json({ error: 'Password must be at least 8 characters.' });
+  }
+  if (!allowedRoles.includes(role)) {
+    return res.status(400).json({ error: 'Invalid role.' });
+  }
+
+  const users = readAuthUsers();
+  if (users.some(u => u.username.toLowerCase() === username)) {
+    return res.status(409).json({ error: 'That username already exists.' });
+  }
+
+  const salt = randomBytes(16).toString('hex');
+  const propertyIds: string[] = Array.isArray(req.body?.propertyIds)
+    ? [...new Set<string>(req.body.propertyIds.map((v: unknown) => String(v).trim()).filter((v: string) => Boolean(v)))]
+    : ['all'];
+
+  const user: AuthUser = {
+    id: `user-${randomBytes(12).toString('hex')}`,
+    username,
+    name,
+    role,
+    propertyIds: propertyIds.length ? propertyIds : ['all'],
+    salt,
+    passwordHash: hashPassword(password, salt),
+    createdAt: new Date().toISOString()
+  };
+
+  users.push(user);
+  saveAuthUsers(users);
+  res.status(201).json({ data: publicUser(user) });
+});
+
+app.patch('/api/v1/admin/users/:id/password', requireAdmin, (req, res) => {
+  const password = String(req.body?.password || '');
+  if (password.length < 8 || password.length > 200) {
+    return res.status(400).json({ error: 'Password must be at least 8 characters.' });
+  }
+
+  const users = readAuthUsers();
+  const user = users.find(u => u.id === req.params.id);
+  if (!user) return res.status(404).json({ error: 'User not found.' });
+
+  user.salt = randomBytes(16).toString('hex');
+  user.passwordHash = hashPassword(password, user.salt);
+  saveAuthUsers(users);
+  res.json({ message: 'Password updated successfully.' });
+});
+
+app.delete('/api/v1/admin/users/:id', requireAdmin, (req, res) => {
+  const users = readAuthUsers();
+  const currentUser = (req as any).authUser;
+  if (req.params.id === currentUser.id) {
+    return res.status(400).json({ error: 'You cannot delete your own account.' });
+  }
+
+  const target = users.find(u => u.id === req.params.id);
+  if (!target) return res.status(404).json({ error: 'User not found.' });
+
+  if (target.role === 'Admin' && users.filter(u => u.role === 'Admin').length <= 1) {
+    return res.status(400).json({ error: 'At least one Admin account must remain.' });
+  }
+
+  saveAuthUsers(users.filter(u => u.id !== target.id));
+  res.json({ message: 'User deleted successfully.' });
+});
 
 app.get('/api/v1/properties', (_req, res) => res.json({ data: readData().properties }));
 app.get('/api/v1/dashboard/room-popularity', (req, res) => {

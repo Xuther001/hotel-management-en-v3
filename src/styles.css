@@ -979,3 +979,596 @@
 
 /* Keep the Finance section tabs together on the left. */
 .finance-tabs{justify-content:flex-start;}
+
+
+/* Authentication screen */
+.auth-screen {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: #f4f6fb;
+}
+.auth-card {
+  width: 100%;
+  max-width: 420px;
+  padding: 36px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: #fff;
+  border: 1px solid #e5e9f2;
+  border-radius: 18px;
+  box-shadow: 0 18px 55px rgba(25, 42, 75, .09);
+}
+.auth-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.auth-brand strong, .auth-brand span {
+  display: block;
+}
+.auth-brand strong { font-size: 18px; }
+.auth-brand span {
+  margin-top: 4px;
+  color: #7d8798;
+  font-size: 10px;
+  letter-spacing: 1.2px;
+}
+.auth-card h1 {
+  margin: 0;
+  font-size: 27px;
+  color: #202b40;
+}
+.auth-card > p {
+  margin: 0 0 12px;
+  color: #778195;
+  line-height: 1.6;
+}
+.auth-card > label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #344054;
+}
+.auth-card > input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px 13px;
+  border: 1px solid #d9dfeb;
+  border-radius: 9px;
+  font: inherit;
+  outline: none;
+}
+.auth-card > input:focus {
+  border-color: #4779ed;
+  box-shadow: 0 0 0 3px rgba(71, 121, 237, .12);
+}
+.auth-submit { width: 100%; margin-top: 8px; justify-content: center; }
+.auth-error {
+  padding: 10px 12px;
+  color: #b42318;
+  background: #fff0ee;
+  border-radius: 8px;
+  font-size: 13px;
+}
+.auth-footnote {
+  margin-top: 8px;
+  text-align: center;
+  color: #8a94a6;
+  font-size: 12px;
+}
+
+
+/* Staff account administration */
+.user-admin-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, .8fr) minmax(0, 1.2fr);
+  gap: 20px;
+  align-items: start;
+}
+.user-create-form {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+.user-create-form > label {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #344054;
+}
+.user-create-form input:not([type="checkbox"]),
+.user-create-form select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 11px 12px;
+  border: 1px solid #d9dfeb;
+  border-radius: 8px;
+  background: #fff;
+  color: #263247;
+  font: inherit;
+}
+.user-property-fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px solid #e5e9f2;
+  border-radius: 9px;
+  padding: 12px;
+}
+.user-property-fieldset legend {
+  padding: 0 5px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.user-property-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.field-help {
+  color: #8a5a12;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.user-list { display: flex; flex-direction: column; }
+.user-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 15px 0;
+  border-bottom: 1px solid #edf0f5;
+}
+.user-row:last-child { border-bottom: 0; }
+.user-row-avatar {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #edf2ff;
+  color: #355fc2;
+  font-size: 12px;
+  font-weight: 700;
+}
+.user-row-info {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.user-row-info strong { font-size: 14px; }
+.user-row-info span { font-size: 12px; color: #7d8798; overflow-wrap: anywhere; }
+.user-row-meta { line-height: 1.5; }
+.user-row-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.button.small { padding: 7px 9px; font-size: 12px; }
+.button.danger { background: #fff0ee; color: #b42318; border: 1px solid #ffd4ce; }
+.auth-error-panel { background: #fff0ee; color: #b42318; }
+.auth-success-panel { background: #ecfdf3; color: #067647; }
+@media (max-width: 900px) {
+  .user-admin-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 560px) {
+  .user-row { align-items: flex-start; flex-wrap: wrap; }
+  .user-row-actions { width: 100%; padding-left: 50px; }
+}
+
+
+/* Guest billing register: readable mobile cards */
+@media (max-width: 560px) {
+  .billing-register-scroll {
+    overflow: visible;
+    max-width: 100%;
+  }
+
+  .billing-register-table {
+    display: block;
+    width: 100%;
+    white-space: normal;
+  }
+
+  .billing-register-table thead {
+    display: none;
+  }
+
+  .billing-register-table tbody {
+    display: block;
+    width: 100%;
+  }
+
+  .billing-register-table tbody tr {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 9px 12px;
+    margin-bottom: 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: #fff;
+  }
+
+  .billing-register-table tbody td {
+    display: block;
+    box-sizing: border-box;
+    width: 100%;
+    padding: 8px 0;
+    border-bottom: 1px solid #f0f2f6;
+    text-align: left;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    font-size: 12px;
+  }
+
+  .billing-register-table tbody td::before {
+    display: block;
+    margin-bottom: 4px;
+    color: #8994a5;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: .45px;
+    text-transform: uppercase;
+  }
+
+  .billing-register-table tbody td:nth-child(1)::before { content: "Reservation / guest"; }
+  .billing-register-table tbody td:nth-child(2)::before { content: "Room"; }
+  .billing-register-table tbody td:nth-child(3)::before { content: "Rental type"; }
+  .billing-register-table tbody td:nth-child(4)::before { content: "Stay"; }
+  .billing-register-table tbody td:nth-child(5)::before { content: "Charges"; }
+  .billing-register-table tbody td:nth-child(6)::before { content: "Paid"; }
+  .billing-register-table tbody td:nth-child(7)::before { content: "Balance"; }
+  .billing-register-table tbody td:nth-child(8)::before { content: "Due now"; }
+  .billing-register-table tbody td:nth-child(9)::before { content: "Overdue"; }
+  .billing-register-table tbody td:nth-child(10)::before { content: "Oldest unpaid due date"; }
+  .billing-register-table tbody td:nth-child(11)::before { content: "Status"; }
+
+  .billing-register-table tbody td:nth-child(12) {
+    padding-top: 12px;
+    border-bottom: 0;
+    text-align: left;
+  }
+
+  .billing-register-table tbody td:nth-child(12)::before {
+    content: "Actions";
+  }
+
+  .billing-register-table .amount-cell {
+    text-align: left;
+  }
+
+  .billing-register-table .table-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .billing-register-table .table-actions .button {
+    flex: 1 1 130px;
+    white-space: normal;
+  }
+
+  .billing-register-table tbody td[colspan] {
+    padding: 14px 0;
+  }
+
+  .billing-register-table tbody td[colspan]::before {
+    content: none;
+  }
+}
+
+
+/* Compact guest billing cards */
+.billing-mobile-details {
+  display: none;
+}
+
+@media (max-width: 560px) {
+  .billing-register-table tbody tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    column-gap: 12px;
+    row-gap: 0;
+    padding: 8px 12px;
+    margin-bottom: 8px;
+  }
+
+  .billing-register-table tbody td {
+    min-width: 0;
+    padding: 5px 0;
+    border-bottom: 1px solid #f0f2f6;
+    font-size: 12px;
+  }
+
+  .billing-register-table tbody td:nth-child(1),
+  .billing-register-table tbody td:nth-child(11),
+  .billing-register-table tbody td:nth-child(12) {
+    grid-column: 1 / -1;
+  }
+
+  .billing-register-table tbody td:nth-child(4),
+  .billing-register-table tbody td:nth-child(9),
+  .billing-register-table tbody td:nth-child(10) {
+    display: none;
+  }
+
+  .billing-register-table tbody td:nth-child(12) {
+    padding-top: 8px;
+    border-bottom: 0;
+  }
+
+  .billing-register-table tbody td::before {
+    margin-bottom: 2px;
+    font-size: 9px;
+  }
+
+  .billing-register-table tbody td:nth-child(1)::before {
+    content: "GUEST";
+  }
+
+  .billing-register-table tbody td:nth-child(2)::before {
+    content: "ROOM";
+  }
+
+  .billing-register-table tbody td:nth-child(3)::before {
+    content: "BILLING TYPE";
+  }
+
+  .billing-register-table tbody td:nth-child(5)::before {
+    content: "CHARGES";
+  }
+
+  .billing-register-table tbody td:nth-child(6)::before {
+    content: "PAID";
+  }
+
+  .billing-register-table tbody td:nth-child(7)::before {
+    content: "BALANCE";
+  }
+
+  .billing-register-table tbody td:nth-child(8)::before {
+    content: "DUE NOW";
+  }
+
+  .billing-register-table tbody td:nth-child(11)::before {
+    content: "STATUS";
+  }
+
+  .billing-register-table tbody td:nth-child(12)::before {
+    content: "ACTIONS";
+  }
+
+  .billing-register-table tbody td:nth-child(5),
+  .billing-register-table tbody td:nth-child(6),
+  .billing-register-table tbody td:nth-child(7),
+  .billing-register-table tbody td:nth-child(8) {
+    align-self: start;
+  }
+
+  .billing-register-table tbody td:nth-child(7) strong {
+    font-size: 13px;
+  }
+
+  .billing-register-table tbody td:nth-child(11) {
+    border-bottom: 0;
+    padding-top: 7px;
+  }
+
+  .billing-register-table .table-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 6px;
+  }
+
+  .billing-register-table .table-actions .button {
+    min-width: 0;
+    padding: 8px 5px;
+    font-size: 11px;
+    white-space: normal;
+  }
+
+  .billing-mobile-details {
+    display: block;
+    margin-top: 5px;
+  }
+
+  .billing-mobile-details summary {
+    color: #4768b0;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    list-style-position: inside;
+  }
+
+  .billing-mobile-detail-content {
+    display: grid;
+    gap: 5px;
+    padding: 8px 0 3px;
+    color: #657187;
+    font-size: 11px;
+    overflow-wrap: anywhere;
+  }
+
+  .billing-mobile-detail-content strong {
+    color: #354158;
+  }
+
+  .billing-register-table tbody td[colspan] {
+    display: block;
+    grid-column: 1 / -1;
+  }
+
+  .billing-register-table tbody td[colspan]::before {
+    content: none;
+  }
+}
+
+
+/* Mobile cards: monthly installments and payment history */
+@media (max-width: 560px) {
+  .installment-breakdown-scroll,
+  .payment-history-scroll {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  .installment-breakdown-table,
+  .payment-history-table {
+    display: block;
+    width: 100%;
+    white-space: normal;
+  }
+
+  .installment-breakdown-table thead,
+  .payment-history-table thead {
+    display: none;
+  }
+
+  .installment-breakdown-table tbody,
+  .payment-history-table tbody {
+    display: block;
+    width: 100%;
+  }
+
+  .installment-breakdown-table tbody tr,
+  .payment-history-table tbody tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    column-gap: 12px;
+    row-gap: 0;
+    box-sizing: border-box;
+    width: 100%;
+    margin-bottom: 9px;
+    padding: 8px 11px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: #fff;
+  }
+
+  .installment-breakdown-table tbody td,
+  .payment-history-table tbody td {
+    display: block;
+    box-sizing: border-box;
+    width: auto;
+    min-width: 0;
+    padding: 6px 0;
+    border-bottom: 1px solid #f0f2f6;
+    text-align: left;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    font-size: 11px;
+  }
+
+  .installment-breakdown-table tbody td::before,
+  .payment-history-table tbody td::before {
+    display: block;
+    margin-bottom: 3px;
+    color: #8994a5;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: .4px;
+    text-transform: uppercase;
+  }
+
+  /* Monthly installment breakdown */
+  .installment-breakdown-table tbody td:nth-child(1),
+  .installment-breakdown-table tbody td:nth-child(2) {
+    grid-column: 1 / -1;
+  }
+
+  .installment-breakdown-table tbody td:nth-child(1)::before {
+    content: "Due date";
+  }
+
+  .installment-breakdown-table tbody td:nth-child(2)::before {
+    content: "Reservation / guest";
+  }
+
+  .installment-breakdown-table tbody td:nth-child(3)::before {
+    content: "Room";
+  }
+
+  .installment-breakdown-table tbody td:nth-child(4)::before {
+    content: "Charge";
+  }
+
+  .installment-breakdown-table tbody td:nth-child(5)::before {
+    content: "Allocated paid";
+  }
+
+  .installment-breakdown-table tbody td:nth-child(6)::before {
+    content: "Remaining";
+  }
+
+  .installment-breakdown-table tbody td:nth-child(7)::before {
+    content: "Status";
+  }
+
+  .installment-breakdown-table tbody td:nth-child(7) {
+    border-bottom: 0;
+  }
+
+  /* Payment history */
+  .payment-history-table tbody td:nth-child(1),
+  .payment-history-table tbody td:nth-child(2),
+  .payment-history-table tbody td:nth-child(4),
+  .payment-history-table tbody td:nth-child(6) {
+    grid-column: 1 / -1;
+  }
+
+  .payment-history-table tbody td:nth-child(1)::before {
+    content: "Date / payment";
+  }
+
+  .payment-history-table tbody td:nth-child(2)::before {
+    content: "Reservation / guest";
+  }
+
+  .payment-history-table tbody td:nth-child(3)::before {
+    content: "Method";
+  }
+
+  .payment-history-table tbody td:nth-child(4)::before {
+    content: "Notes";
+  }
+
+  .payment-history-table tbody td:nth-child(5)::before {
+    content: "Amount";
+  }
+
+  .payment-history-table tbody td:nth-child(6)::before {
+    content: "Actions";
+  }
+
+  .payment-history-table tbody td:nth-child(6) {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    border-bottom: 0;
+    padding-top: 9px;
+  }
+
+  .payment-history-table tbody td:nth-child(6) .payment-delete-button {
+    display: inline-flex;
+  }
+
+  .installment-breakdown-table tbody td[colspan],
+  .payment-history-table tbody td[colspan] {
+    display: block;
+    grid-column: 1 / -1;
+    border-bottom: 0;
+  }
+
+  .installment-breakdown-table tbody td[colspan]::before,
+  .payment-history-table tbody td[colspan]::before {
+    content: none;
+  }
+}
