@@ -431,6 +431,7 @@ type AuthUser = {
   id: string;
   username: string;
   name: string;
+  jobTitle?: string;
   role: string;
   propertyIds: string[];
   salt: string;
@@ -455,6 +456,7 @@ function publicUser(user: AuthUser) {
     id: user.id,
     username: user.username,
     name: user.name,
+    jobTitle: user.jobTitle || '',
     role: user.role,
     propertyIds: user.propertyIds,
     createdAt: user.createdAt
@@ -632,6 +634,7 @@ app.get('/api/v1/admin/users', requireAdmin, (_req, res) => {
 app.post('/api/v1/admin/users', requireAdmin, (req, res) => {
   const username = String(req.body?.username || '').trim().toLowerCase();
   const name = String(req.body?.name || '').trim();
+  const jobTitle = String(req.body?.jobTitle || '').trim();
   const password = String(req.body?.password || '');
   const role = String(req.body?.role || 'Receptionist');
   const allowedRoles = ['Admin', 'Manager', 'Receptionist', 'Housekeeping', 'Finance'];
@@ -644,6 +647,9 @@ app.post('/api/v1/admin/users', requireAdmin, (req, res) => {
   }
   if (password.length < 8 || password.length > 200) {
     return res.status(400).json({ error: 'Password must be at least 8 characters.' });
+  }
+  if (jobTitle.length > 100) {
+    return res.status(400).json({ error: 'Job title must be 100 characters or fewer.' });
   }
   if (!allowedRoles.includes(role)) {
     return res.status(400).json({ error: 'Invalid role.' });
@@ -663,6 +669,7 @@ app.post('/api/v1/admin/users', requireAdmin, (req, res) => {
     id: `user-${randomBytes(12).toString('hex')}`,
     username,
     name,
+    jobTitle,
     role,
     propertyIds: propertyIds.length ? propertyIds : ['all'],
     salt,
@@ -673,6 +680,82 @@ app.post('/api/v1/admin/users', requireAdmin, (req, res) => {
   users.push(user);
   saveAuthUsers(users);
   res.status(201).json({ data: publicUser(user) });
+});
+
+app.patch('/api/v1/admin/users/:id', requireAdmin, (req, res) => {
+  const users = readAuthUsers();
+  const currentUser = (req as any).authUser;
+  const user = users.find(u => u.id === req.params.id);
+  if (!user) return res.status(404).json({ error: 'User not found.' });
+
+  const name = String(req.body?.name ?? user.name).trim();
+  const jobTitle = String(req.body?.jobTitle ?? user.jobTitle ?? '').trim();
+  const role = String(req.body?.role ?? user.role);
+  const allowedRoles = ['Admin', 'Manager', 'Receptionist', 'Housekeeping', 'Finance'];
+
+  if (name.length < 2 || name.length > 100) {
+    return res.status(400).json({ error: 'Enter a name between 2 and 100 characters.' });
+  }
+  if (jobTitle.length > 100) {
+    return res.status(400).json({ error: 'Job title must be 100 characters or fewer.' });
+  }
+  if (!allowedRoles.includes(role)) {
+    return res.status(400).json({ error: 'Invalid role.' });
+  }
+
+  const rawPropertyIds = req.body?.propertyIds;
+  if (!Array.isArray(rawPropertyIds)) {
+    return res.status(400).json({ error: 'Select at least one valid hotel assignment.' });
+  }
+
+  const propertyIds = [...new Set<string>(
+    rawPropertyIds
+      .map((value: unknown) => String(value).trim())
+      .filter((value: string) => Boolean(value))
+  )];
+
+  const validPropertyIds = new Set(
+    (readData().properties || []).map((property: AnyRecord) => String(property.id))
+  );
+  if (
+    propertyIds.length === 0 ||
+    (propertyIds.includes('all') && propertyIds.length !== 1) ||
+    propertyIds.some(id => id !== 'all' && !validPropertyIds.has(id))
+  ) {
+    return res.status(400).json({ error: 'Select valid hotel assignments.' });
+  }
+
+  if (user.id === currentUser.id && role !== 'Admin') {
+    return res.status(400).json({ error: 'You cannot remove Admin access from your own account.' });
+  }
+
+  if (user.role === 'Admin' && role !== 'Admin' &&
+      users.filter(u => u.role === 'Admin').length <= 1) {
+    return res.status(400).json({ error: 'At least one Admin account must remain.' });
+  }
+
+  if (user.id === currentUser.id &&
+      (role !== user.role ||
+       JSON.stringify([...propertyIds].sort()) !== JSON.stringify([...(user.propertyIds || ['all'])].sort()))) {
+    return res.status(400).json({
+      error: 'You cannot change your own role or hotel assignments. Ask another Admin to do this.'
+    });
+  }
+
+  const accessChanged =
+    role !== user.role ||
+    JSON.stringify([...propertyIds].sort()) !==
+      JSON.stringify([...(user.propertyIds || ['all'])].sort());
+
+  user.name = name;
+  user.jobTitle = jobTitle;
+  user.role = role;
+  user.propertyIds = propertyIds;
+  saveAuthUsers(users);
+
+  if (accessChanged) revokeSessionsForUser(user.id);
+
+  res.json({ data: publicUser(user), message: 'User profile updated successfully.' });
 });
 
 app.patch('/api/v1/admin/users/:id/password', requireAdmin, (req, res) => {

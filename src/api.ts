@@ -35,11 +35,21 @@ export const api = {
   createUser: (data: {
     username: string;
     name: string;
+    jobTitle: string;
     password: string;
     role: string;
     propertyIds: string[];
   }) => request<any>('/admin/users', {
     method: 'POST',
+    body: JSON.stringify(data)
+  }),
+  updateUser: (id: string, data: {
+    name: string;
+    jobTitle: string;
+    role: string;
+    propertyIds: string[];
+  }) => request<any>(`/admin/users/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
     body: JSON.stringify(data)
   }),
   resetUserPassword: (id: string, password: string) =>

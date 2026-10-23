@@ -1172,6 +1172,8 @@ function UserManagement({ onBack }: { onBack: () => void }) {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [propertyIds, setPropertyIds] = useState<string[]>(['all']);
+  const [editingUser, setEditingUser] = useState<AnyRow | null>(null);
+  const [editPropertyIds, setEditPropertyIds] = useState<string[]>(['all']);
 
   async function loadUsers() {
     setLoading(true);
@@ -1201,6 +1203,7 @@ function UserManagement({ onBack }: { onBack: () => void }) {
     const data = {
       username: String(form.get('username') || '').trim().toLowerCase(),
       name: String(form.get('name') || '').trim(),
+      jobTitle: String(form.get('jobTitle') || '').trim(),
       password: String(form.get('password') || ''),
       role: String(form.get('role') || 'Receptionist'),
       propertyIds: propertyIds.includes('all') ? ['all'] : propertyIds
@@ -1257,6 +1260,62 @@ function UserManagement({ onBack }: { onBack: () => void }) {
     }
   }
 
+  function startEditingUser(user: AnyRow) {
+    setEditingUser(user);
+    setEditPropertyIds(
+      !user.propertyIds?.length || user.propertyIds.includes('all')
+        ? ['all']
+        : [...user.propertyIds]
+    );
+    setError('');
+    setNotice('');
+  }
+
+  function toggleEditProperty(id: string, checked: boolean) {
+    if (id === 'all') {
+      setEditPropertyIds(checked ? ['all'] : []);
+      return;
+    }
+    setEditPropertyIds(current => {
+      const next = current.filter(value => value !== 'all');
+      return checked
+        ? [...new Set([...next, id])]
+        : next.filter(value => value !== id);
+    });
+  }
+
+  async function saveProfile(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (busy || !editingUser) return;
+
+    const form = new FormData(event.currentTarget);
+    const data = {
+      name: String(form.get('name') || '').trim(),
+      jobTitle: String(form.get('jobTitle') || '').trim(),
+      role: String(form.get('role') || ''),
+      propertyIds: editPropertyIds.includes('all') ? ['all'] : editPropertyIds
+    };
+
+    if (!data.propertyIds.length) {
+      setError('Select All hotels or at least one hotel.');
+      return;
+    }
+
+    setBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      await api.updateUser(editingUser.id, data);
+      setNotice(`Profile updated for ${editingUser.username}.`);
+      setEditingUser(null);
+      await loadUsers();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not update profile.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function toggleProperty(id: string, checked: boolean) {
     if (id === 'all') {
       setPropertyIds(checked ? ['all'] : []);
@@ -1290,6 +1349,7 @@ function UserManagement({ onBack }: { onBack: () => void }) {
       <Panel title="Create staff account" subtitle="Usernames must be unique. Passwords must contain at least 8 characters.">
         <form className="user-create-form" onSubmit={createAccount}>
           <label>Full name<input name="name" required minLength={2} maxLength={100} placeholder="e.g. Nguyen Van An"/></label>
+          <label>Job title<input name="jobTitle" maxLength={100} placeholder="e.g. Front Office Supervisor"/></label>
           <label>Username<input name="username" required minLength={3} maxLength={32} pattern="[A-Za-z0-9._-]+" autoComplete="off" placeholder="e.g. receptionist01"/></label>
           <label>Temporary password<input name="password" type="password" required minLength={8} maxLength={200} autoComplete="new-password" placeholder="At least 8 characters"/></label>
           <label>Role
@@ -1327,9 +1387,11 @@ function UserManagement({ onBack }: { onBack: () => void }) {
               <div className="user-row-info">
                 <strong>{user.name}</strong>
                 <span>@{user.username}</span>
+                {user.jobTitle && <span>{user.jobTitle}</span>}
                 <span className="user-row-meta">{user.role} · {propertyLabel(user)}</span>
               </div>
               <div className="user-row-actions">
+                <button className="button secondary small" onClick={() => startEditingUser(user)}>Edit profile</button>
                 <button className="button secondary small" onClick={() => void resetPassword(user)}>Reset password</button>
                 <button className="button danger small" onClick={() => void deleteAccount(user)}>Delete</button>
               </div>
@@ -1338,6 +1400,44 @@ function UserManagement({ onBack }: { onBack: () => void }) {
         }
       </Panel>
     </div>
+    {editingUser && <Modal title={`Edit profile — ${editingUser.username}`} onClose={() => {
+      if (!busy) setEditingUser(null);
+    }}>
+      <form className="user-create-form profile-edit-form" onSubmit={saveProfile} style={{padding: 20}}>
+        <label>Full name
+          <input name="name" required minLength={2} maxLength={100} defaultValue={editingUser.name || ''}/>
+        </label>
+        <label>Job title / position
+          <input name="jobTitle" maxLength={100} defaultValue={editingUser.jobTitle || ''} placeholder="e.g. Front Office Supervisor"/>
+        </label>
+        <label>System role
+          <select name="role" defaultValue={editingUser.role || 'Receptionist'}>
+            <option value="Admin">Admin</option>
+            <option value="Manager">Manager</option>
+            <option value="Receptionist">Receptionist</option>
+            <option value="Housekeeping">Housekeeping</option>
+            <option value="Finance">Finance</option>
+          </select>
+        </label>
+        <fieldset className="user-property-fieldset">
+          <legend>Assigned hotels</legend>
+          <label className="user-property-option">
+            <input type="checkbox" checked={editPropertyIds.includes('all')} onChange={e => toggleEditProperty('all', e.target.checked)}/>
+            All hotels
+          </label>
+          {properties.map(p => <label className="user-property-option" key={p.id}>
+            <input type="checkbox" checked={editPropertyIds.includes(p.id)} onChange={e => toggleEditProperty(p.id, e.target.checked)}/>
+            {p.name}
+          </label>)}
+          <span className="field-help">Hotel assignments are stored, but do not yet restrict API data access.</span>
+        </fieldset>
+        <div className="form-actions">
+          <button type="button" className="button secondary" disabled={busy} onClick={() => setEditingUser(null)}>Cancel</button>
+          <Button type="submit" disabled={busy}>{busy ? 'Saving profile…' : 'Save profile'}</Button>
+        </div>
+      </form>
+    </Modal>}
+
     <div className="notice demo-notice"><AlertTriangle size={17}/><div>
       <strong>Access-control limitation</strong>
       <span>Login and account administration are active. Hotel assignments are currently stored for reference, but do not yet restrict which hotel data a signed-in staff member can access. Complete backend authorization before public production use.</span>
