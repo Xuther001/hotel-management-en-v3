@@ -1511,9 +1511,22 @@ function getBillingRows(d: AnyRecord) {
         payments: reservationPayments
       };
     })
-    .sort((a: AnyRecord, b: AnyRecord) =>
-      String(a.dueDate).localeCompare(String(b.dueDate))
-    );
+    .sort((a: AnyRecord, b: AnyRecord) => {
+      const roomA = String(a.room || '');
+      const roomB = String(b.room || '');
+      const isGuestRoomA = /^G\d+$/i.test(roomA);
+      const isGuestRoomB = /^G\d+$/i.test(roomB);
+
+      // Put G rooms first, then sort all room numbers naturally.
+      if (isGuestRoomA !== isGuestRoomB) {
+        return isGuestRoomA ? -1 : 1;
+      }
+
+      return roomA.localeCompare(roomB, undefined, {
+        numeric: true,
+        sensitivity: 'base'
+      });
+    });
 }
 app.get('/api/v1/billing', (_req, res) => {
   const d = readData();
