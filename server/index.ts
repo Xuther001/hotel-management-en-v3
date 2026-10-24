@@ -1042,7 +1042,8 @@ app.post('/api/v1/reservations', (req, res) => {
     guests: Number(body.guests || 1),
     status: 'Confirmed',
     source: body.source || 'Direct',
-    amount: Number(body.amount || 0)
+    amount: Number(body.amount || 0),
+    note: String(body.note || '').trim()
   };
 
   d.reservations.unshift(item);
@@ -1055,7 +1056,8 @@ app.post('/api/v1/reservations', (req, res) => {
     { key: 'guests', label: 'Guests' },
     { key: 'status', label: 'Status' },
     { key: 'source', label: 'Booking source' },
-    { key: 'amount', label: 'Amount' }
+    { key: 'amount', label: 'Amount' },
+    { key: 'note', label: 'Reservation note' }
   ]), activityActor(req));
   writeData(d);
   res.status(201).json({ data: item });
@@ -1069,7 +1071,7 @@ app.patch('/api/v1/reservations/:id', (req, res) => {
   const body = req.body || {};
   const detailFields = [
     'guest', 'propertyId', 'room', 'checkIn', 'checkOut',
-    'guests', 'amount', 'source'
+    'guests', 'amount', 'source', 'note'
   ];
   const editingDetails = detailFields.some(key =>
     Object.prototype.hasOwnProperty.call(body, key)
@@ -1156,7 +1158,8 @@ app.patch('/api/v1/reservations/:id', (req, res) => {
     { key: 'guests', label: 'Guests' },
     { key: 'status', label: 'Status' },
     { key: 'source', label: 'Booking source' },
-    { key: 'amount', label: 'Amount' }
+    { key: 'amount', label: 'Amount' },
+    { key: 'note', label: 'Reservation note' }
   ]);
 
   const automaticRoomChanges: any[] = [];
