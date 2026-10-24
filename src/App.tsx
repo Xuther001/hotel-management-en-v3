@@ -9,6 +9,50 @@ import {
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, AreaChart, Area } from 'recharts';
 import { api, money, API_URL, clearAuthToken } from './api';
 
+async function downloadBackup(
+  url: string,
+  filename: string,
+  setMessage: (message: string) => void,
+  setState: (state: 'idle' | 'sending' | 'success' | 'error') => void
+) {
+  setState('sending');
+  setMessage('Preparing download...');
+
+  try {
+    const token = localStorage.getItem('hotel_auth_token');
+    const response = await fetch(url, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {}
+    });
+
+    if (!response.ok) {
+      let message = `Download failed (${response.status}).`;
+      try {
+        const body = await response.json();
+        if (body.error) message = body.error;
+      } catch {
+        // Keep the HTTP status message if the response isn't JSON.
+      }
+      throw new Error(message);
+    }
+
+    const blob = await response.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = objectUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(objectUrl);
+
+    setState('success');
+    setMessage(`Download started: ${filename}`);
+  } catch (error) {
+    setState('error');
+    setMessage(error instanceof Error ? error.message : 'Download failed.');
+  }
+}
+
 type AnyRow = Record<string, any>;
 type AuthUser = {
   id: string;
@@ -1150,10 +1194,10 @@ function SettingsPage() {
         </div>
       </div>
       <div className="backup-actions">
-        <Button onClick={() => { window.location.href = `${API_URL}/backup/download`; }}>
+        <Button onClick={() => { void downloadBackup(`${API_URL}/backup/download`, 'hospitality-group-data-backup.xlsx', setBackupMessage, setBackupState); }}>
           Download All Data
         </Button>
-        <Button onClick={() => { window.location.href = `${API_URL}/backup/reservations/download`; }}>
+        <Button onClick={() => { void downloadBackup(`${API_URL}/backup/reservations/download`, 'hospitality-group-reservations.xlsx', setBackupMessage, setBackupState); }}>
           Download Reservations Data
         </Button>
         <Button variant="secondary" onClick={sendBackup} disabled={backupState === 'sending'}>
