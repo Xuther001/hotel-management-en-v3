@@ -1008,7 +1008,7 @@ function Rooms({ property }: { property: string }) {
                   String(reservation.propertyId) === String(room.propertyId) &&
                   String(reservation.room) === String(room.number) &&
                   reservation.status === 'Confirmed' &&
-                  String(reservation.checkOut || '') >= (() => {
+                  String(reservation.checkIn || '') === (() => {
                     const now = new Date();
                     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
                   })()
