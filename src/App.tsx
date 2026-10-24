@@ -794,6 +794,7 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
 
 function Rooms({ property }: { property: string }) {
   const [rows, setRows] = useState<AnyRow[]>([]);
+  const [reservations, setReservations] = useState<AnyRow[]>([]);
   const [query, setQuery] = useState('');
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
   const [selectedNoteRoom, setSelectedNoteRoom] = useState<AnyRow | null>(null);
@@ -802,9 +803,13 @@ function Rooms({ property }: { property: string }) {
   const [pushState, setPushState] = useState('');
   const [pushBusy, setPushBusy] = useState(false);
 
-  const load = () => api.rooms(query).then(r => {
-    const filtered = r.data.filter((x: AnyRow) => property === 'all' || x.propertyId === property);
+  const load = () => Promise.all([
+    api.rooms(query),
+    api.reservations('', property)
+  ]).then(([roomResult, reservationResult]) => {
+    const filtered = roomResult.data.filter((x: AnyRow) => property === 'all' || x.propertyId === property);
     setRows(filtered);
+    setReservations(reservationResult.data || []);
     setNoteDrafts(prev => {
       const next = { ...prev };
       filtered.forEach((room: AnyRow) => {
@@ -999,6 +1004,17 @@ function Rooms({ property }: { property: string }) {
               <div className="room-status-popup-badges">
                 <span className={`room-status-popup-badge status-${String(room.occupancyStatus).toLowerCase()}`}>{room.occupancyStatus}</span>
                 <span className={`room-status-popup-badge status-${String(room.housekeepingStatus).toLowerCase()}`}>{room.housekeepingStatus}</span>
+                {reservations.some(reservation =>
+                  String(reservation.propertyId) === String(room.propertyId) &&
+                  String(reservation.room) === String(room.number) &&
+                  reservation.status === 'Confirmed' &&
+                  String(reservation.checkOut || '') >= (() => {
+                    const now = new Date();
+                    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+                  })()
+                ) && (
+                  <span className="room-status-popup-badge status-confirmed">Confirmed</span>
+                )}
               </div>
             </div>
           ))}
