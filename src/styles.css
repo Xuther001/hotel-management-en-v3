@@ -1615,3 +1615,28 @@
     content: none;
   }
 }
+
+
+/* Subtle, always-visible reservation notes */
+.reservation-note-content {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  max-width: 300px;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1px solid #e2ebf7;
+  border-left: 3px solid #c4d8f1;
+  border-radius: 6px;
+  background: #f5f9ff;
+  color: #536b88;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.reservation-note-icon {
+  flex-shrink: 0;
+  opacity: 0.75;
+}

@@ -1042,7 +1042,6 @@ app.post('/api/v1/reservations', (req, res) => {
     guests: Number(body.guests || 1),
     status: 'Confirmed',
     source: body.source || 'Direct',
-    amount: Number(body.amount || 0),
     note: String(body.note || '').trim()
   };
 
@@ -1056,7 +1055,6 @@ app.post('/api/v1/reservations', (req, res) => {
     { key: 'guests', label: 'Guests' },
     { key: 'status', label: 'Status' },
     { key: 'source', label: 'Booking source' },
-    { key: 'amount', label: 'Amount' },
     { key: 'note', label: 'Reservation note' }
   ]), activityActor(req));
   writeData(d);
@@ -1071,7 +1069,7 @@ app.patch('/api/v1/reservations/:id', (req, res) => {
   const body = req.body || {};
   const detailFields = [
     'guest', 'propertyId', 'room', 'checkIn', 'checkOut',
-    'guests', 'amount', 'source', 'note'
+    'guests', 'source', 'note'
   ];
   const editingDetails = detailFields.some(key =>
     Object.prototype.hasOwnProperty.call(body, key)
@@ -1100,7 +1098,7 @@ app.patch('/api/v1/reservations/:id', (req, res) => {
     return res.status(400).json({ error: 'Invalid reservation status.' });
   }
 
-  const updated = { ...item, ...body };
+  const updated = { ...item, ...body, amount: item.amount };
 
   if (!updated.guest || !updated.propertyId || !updated.room || !updated.checkIn || !updated.checkOut) {
     return res.status(400).json({ error: 'Guest, hotel, room, check-in, and check-out are required.' });
@@ -1158,7 +1156,6 @@ app.patch('/api/v1/reservations/:id', (req, res) => {
     { key: 'guests', label: 'Guests' },
     { key: 'status', label: 'Status' },
     { key: 'source', label: 'Booking source' },
-    { key: 'amount', label: 'Amount' },
     { key: 'note', label: 'Reservation note' }
   ]);
 
@@ -1393,16 +1390,28 @@ function getBillingRows(d: AnyRecord) {
       const cfg = settings.find((x: AnyRecord) => x.reservationId === r.id) || {};
       const rentalType = cfg.rentalType === 'Monthly' ? 'Monthly' : 'Daily';
       const monthlyRate = Math.max(0, Number(cfg.monthlyRate || 0));
+      const nights = r.checkIn && r.checkOut
+        ? Math.max(0, Math.round(
+            (Date.parse(`${r.checkOut}T00:00:00Z`) -
+             Date.parse(`${r.checkIn}T00:00:00Z`)) / 86400000
+          ))
+        : 0;
+
+      // Daily and monthly rates are independent billing settings.
+      // Never derive a daily rate from a legacy reservation amount.
+      const dailyRate = Math.max(0, Number(cfg.dailyRate || 0));
       const installments: AnyRecord[] = [];
 
       if (rentalType === 'Daily') {
-        const amount = Math.max(0, Number(r.amount || 0));
-        installments.push({
-          dueDate: String(r.checkIn || today),
-          charge: amount,
-          paid: 0,
-          balance: amount
-        });
+        if (dailyRate > 0 && nights > 0) {
+          const amount = Math.round(dailyRate * nights);
+          installments.push({
+            dueDate: String(r.checkIn || today),
+            charge: amount,
+            paid: 0,
+            balance: amount
+          });
+        }
       } else if (monthlyRate > 0 && r.checkIn && r.checkOut) {
         const start = new Date(`${r.checkIn}T00:00:00Z`).getTime();
         const end = new Date(`${r.checkOut}T00:00:00Z`).getTime();
@@ -1503,6 +1512,7 @@ function getBillingRows(d: AnyRecord) {
         reservationStatus: r.status,
         rentalType,
         monthlyRate,
+        dailyRate,
         charge,
         paid,
         balance,
@@ -1542,12 +1552,25 @@ app.patch('/api/v1/billing/:reservationId', (req, res) => {
   if (!r) return res.status(404).json({ error: 'Reservation not found' });
   const rentalType = req.body.rentalType === 'Monthly' ? 'Monthly' : 'Daily';
   const monthlyRate = Number(req.body.monthlyRate || 0);
-  if (!Number.isFinite(monthlyRate) || monthlyRate < 0 || (rentalType === 'Monthly' && monthlyRate <= 0))
-    return res.status(400).json({ error: 'Enter a valid monthly rent amount for monthly stays.' });
+  const dailyRate = Number(req.body.dailyRate || 0);
+
+  if (!Number.isFinite(monthlyRate) || monthlyRate < 0 ||
+      (rentalType === 'Monthly' && monthlyRate <= 0)) {
+    return res.status(400).json({
+      error: 'Enter a valid monthly rent amount for monthly stays.'
+    });
+  }
+  if (!Number.isFinite(dailyRate) || dailyRate < 0 ||
+      (rentalType === 'Daily' && dailyRate <= 0)) {
+    return res.status(400).json({
+      error: 'Enter a valid daily rate greater than zero for daily stays.'
+    });
+  }
+
   if (!Array.isArray(d.billingSettings)) d.billingSettings = [];
   const setting = d.billingSettings.find((x: AnyRecord) => x.reservationId === r.id);
-  if (setting) Object.assign(setting, { rentalType, monthlyRate });
-  else d.billingSettings.push({ reservationId: r.id, rentalType, monthlyRate });
+  if (setting) Object.assign(setting, { rentalType, dailyRate, monthlyRate });
+  else d.billingSettings.push({ reservationId: r.id, rentalType, dailyRate, monthlyRate });
   writeData(d);
   res.json({ data: getBillingRows(d).find((x: AnyRecord) => x.reservationId === r.id) });
 });
