@@ -996,8 +996,9 @@ app.post('/api/v1/reservations', (req, res) => {
   const now = new Date();
   const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
-  if (body.checkIn < today) {
-    return res.status(400).json({ error: 'Check-in cannot be in the past.' });
+  const earliestAllowedCheckIn = new Date(Date.parse(`${today}T00:00:00Z`) - 86400000).toISOString().slice(0, 10);
+  if (body.checkIn < earliestAllowedCheckIn) {
+    return res.status(400).json({ error: 'Check-in cannot be more than one day in the past.' });
   }
   if (body.checkOut <= body.checkIn) {
     return res.status(400).json({ error: 'Check-out must be after check-in.' });
