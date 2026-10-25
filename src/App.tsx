@@ -767,6 +767,9 @@ function Reservations({ property }: { property: string }) {
       note: String(f.get('note') || '').trim()
     };
 
+    const scrollX = window.scrollX;
+    const scrollY = window.scrollY;
+
     try {
       setError('');
       if (editingReservation) {
@@ -777,6 +780,10 @@ function Reservations({ property }: { property: string }) {
       setOpen(false);
       setEditingReservation(null);
       await load();
+
+      requestAnimationFrame(() => {
+        window.scrollTo({ left: scrollX, top: scrollY, behavior: 'instant' });
+      });
     } catch (e: any) {
       setError(e.message || 'Could not save reservation.');
     }
