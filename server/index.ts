@@ -1416,25 +1416,58 @@ function getBillingRows(d: AnyRecord) {
       } else if (monthlyRate > 0 && r.checkIn && r.checkOut) {
         const start = new Date(`${r.checkIn}T00:00:00Z`).getTime();
         const end = new Date(`${r.checkOut}T00:00:00Z`).getTime();
-        const nightsByMonth: Record<string, number> = {};
+        const startDate = new Date(start);
 
-        // Count each overnight stay; the checkout date is excluded.
-        for (let t = start; t < end; t += 86400000) {
-          const month = new Date(t).toISOString().slice(0, 7);
-          nightsByMonth[month] = (nightsByMonth[month] || 0) + 1;
-        }
+        // Keep the original check-in day as the monthly anniversary.
+        // Clamp to the last day of shorter months (e.g. Jan 31 -> Feb 28),
+        // then restore the original day when later months allow it.
+        const anniversary = (monthOffset: number) => {
+          const targetMonth = new Date(Date.UTC(
+            startDate.getUTCFullYear(),
+            startDate.getUTCMonth() + monthOffset,
+            1
+          ));
+          const lastDay = new Date(Date.UTC(
+            targetMonth.getUTCFullYear(),
+            targetMonth.getUTCMonth() + 1,
+            0
+          )).getUTCDate();
 
-        for (const [month, nights] of Object.entries(nightsByMonth)) {
-          const [year, monthNo] = month.split('-').map(Number);
-          const days = new Date(Date.UTC(year, monthNo, 0)).getUTCDate();
-          const amount = Math.round((monthlyRate / days * nights) / 1000) * 1000;
+          return Date.UTC(
+            targetMonth.getUTCFullYear(),
+            targetMonth.getUTCMonth(),
+            Math.min(startDate.getUTCDate(), lastDay)
+          );
+        };
+
+        // Each complete check-in-to-anniversary period costs one full month.
+        // Only the final incomplete period is prorated by its actual period length.
+        let periodStart = start;
+        let monthOffset = 1;
+
+        while (periodStart < end) {
+          const nextAnniversary = anniversary(monthOffset);
+          const periodEnd = Math.min(end, nextAnniversary);
+          const periodNights = Math.round((periodEnd - periodStart) / 86400000);
+          const periodDays = Math.round((nextAnniversary - periodStart) / 86400000);
+          const isFullMonth = nextAnniversary <= end;
+
+          const rawAmount = isFullMonth
+            ? monthlyRate
+            : monthlyRate / Math.max(1, periodDays) * periodNights;
+          const amount = Math.round(rawAmount / 1000) * 1000;
+
+          const periodDate = new Date(periodStart).toISOString().slice(0, 10);
+          const month = periodDate.slice(0, 7);
           const fifth = `${month}-05`;
 
-          // For a first month that begins after the 5th, the prorated
-          // first installment is due at check-in rather than retroactively.
-          const dueDate = month === String(r.checkIn).slice(0, 7) && fifth < String(r.checkIn)
-            ? String(r.checkIn)
-            : fifth;
+          // Preserve the existing due-date rule:
+          // the first installment is due at check-in if the 5th has passed;
+          // subsequent installments remain due on the 5th of their month.
+          const dueDate =
+            periodStart === start && fifth < String(r.checkIn)
+              ? String(r.checkIn)
+              : fifth;
 
           installments.push({
             dueDate,
@@ -1442,6 +1475,9 @@ function getBillingRows(d: AnyRecord) {
             paid: 0,
             balance: amount
           });
+
+          periodStart = periodEnd;
+          monthOffset += 1;
         }
       }
 
