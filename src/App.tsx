@@ -726,18 +726,36 @@ function Reservations({ property }: { property: string }) {
       );
 
       if (!confirmed) {
-        await load();
         return;
       }
     }
 
+    // Refresh data without replacing the table with the loading screen.
+    const scrollX = window.scrollX;
+    const scrollY = window.scrollY;
+
     try {
       setError('');
       await api.updateReservation(id, { status });
-      await load();
+      const result = await api.reservations(query, property);
+      setRows(result.data);
+
+      requestAnimationFrame(() => {
+        window.scrollTo({ left: scrollX, top: scrollY, behavior: 'instant' });
+      });
     } catch (e: any) {
       setError(e.message || 'Could not update reservation status.');
-      await load();
+
+      try {
+        const result = await api.reservations(query, property);
+        setRows(result.data);
+      } catch {
+        // Keep the existing rows visible if the refresh also fails.
+      }
+
+      requestAnimationFrame(() => {
+        window.scrollTo({ left: scrollX, top: scrollY, behavior: 'instant' });
+      });
     }
   }
 
