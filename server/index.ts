@@ -1405,7 +1405,7 @@ function getBillingRows(d: AnyRecord) {
 
       if (rentalType === 'Daily') {
         if (dailyRate > 0 && nights > 0) {
-          const amount = Math.round(dailyRate * nights);
+          const amount = Math.round((dailyRate * nights) / 1000) * 1000;
           installments.push({
             dueDate: String(r.checkIn || today),
             charge: amount,
@@ -1427,7 +1427,7 @@ function getBillingRows(d: AnyRecord) {
         for (const [month, nights] of Object.entries(nightsByMonth)) {
           const [year, monthNo] = month.split('-').map(Number);
           const days = new Date(Date.UTC(year, monthNo, 0)).getUTCDate();
-          const amount = Math.round(monthlyRate / days * nights);
+          const amount = Math.round((monthlyRate / days * nights) / 1000) * 1000;
           const fifth = `${month}-05`;
 
           // For a first month that begins after the 5th, the prorated
