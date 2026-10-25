@@ -681,6 +681,187 @@
 }
 
 
+.calendar-more-events {
+  appearance: none;
+  align-self: flex-start;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #2563eb;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.calendar-more-events:hover {
+  background: #eff6ff;
+  text-decoration: underline;
+}
+
+.calendar-more-events:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+
+/* RESERVATION CALENDAR - DAILY TOTALS */
+.calendar-day-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0 0 5px;
+}
+
+.calendar-day-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-width: 30px;
+  min-height: 22px;
+  padding: 2px 5px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.2;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.calendar-day-count.check-in {
+  color: #1d4ed8;
+  background: #dbeafe;
+  border-color: #bfdbfe;
+}
+
+.calendar-day-count.check-out {
+  color: #9a3412;
+  background: #ffedd5;
+  border-color: #fed7aa;
+}
+
+.calendar-day-count:hover {
+  filter: brightness(0.97);
+}
+
+.calendar-day-count:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+/* RESERVATION CALENDAR - POPUP LAYOUT */
+.calendar-popup {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 65vh;
+  overflow-y: auto;
+  padding: 0 15px 15px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.calendar-popup-date {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin: 0;
+  padding: 10px 0;
+  color: var(--muted, #64748b);
+  background: var(--surface, white);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.calendar-popup-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 10px;
+  background: var(--surface, white);
+  box-shadow: 0 1px 2px rgb(15 23 42 / 4%);
+}
+
+.calendar-popup-guest {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  min-width: 0;
+}
+
+.calendar-popup-guest strong {
+  color: var(--text, #0f172a);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.calendar-popup-guest > span {
+  max-width: 100%;
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.calendar-popup-event-type {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 3px 7px;
+  border-radius: 5px;
+  font-size: 11px !important;
+  font-weight: 700;
+}
+
+.calendar-popup-event-type.check-in {
+  color: #1d4ed8;
+  background: #dbeafe;
+}
+
+.calendar-popup-event-type.check-out {
+  color: #9a3412;
+  background: #ffedd5;
+}
+
+.calendar-popup-guest .calendar-popup-booking {
+  color: var(--muted, #64748b);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+
+.calendar-popup-row > .badge {
+  flex-shrink: 0;
+  align-self: center;
+}
+
+@media (max-width: 560px) {
+  .calendar-day-counts {
+    display: none;
+  }
+
+  .calendar-popup-row {
+    align-items: flex-start;
+    gap: 8px;
+    padding: 10px;
+  }
+
+  .calendar-popup-row > .badge {
+    max-width: 108px;
+    white-space: normal;
+    text-align: center;
+  }
+}
+
 /* RESERVATION CALENDAR - MOBILE ARRIVAL / DEPARTURE COUNTS */
 .calendar-count-buttons {
   display: none;

@@ -421,8 +421,8 @@ function ReservationCalendar({ property }: { property: string }) {
   const [error, setError] = useState('');
   const [selectedEventList, setSelectedEventList] = useState<{
     date: string;
-    type: 'in' | 'out';
-    rows: AnyRow[];
+    type: 'in' | 'out' | 'all';
+    rows: { row: AnyRow; type: 'in' | 'out' }[];
   } | null>(null);
   const [month, setMonth] = useState(() => {
     const now = new Date();
@@ -550,6 +550,29 @@ function ReservationCalendar({ property }: { property: string }) {
                   }}>
                     {day.getDate()}{isToday ? ' · Today' : ''}
                   </div>
+                  <div className="calendar-day-counts" aria-label={`Events on ${key}`}>
+                    {(['in', 'out'] as const).map(type => {
+                      const count = events.filter(event => event.type === type).length;
+                      if (!count) return null;
+                      return (
+                        <button
+                          key={type}
+                          type="button"
+                          className={`calendar-day-count ${type === 'in' ? 'check-in' : 'check-out'}`}
+                          aria-label={`${count} check-${type === 'in' ? 'ins' : 'outs'} on ${key}`}
+                          title={`${count} check-${type === 'in' ? 'ins' : 'outs'}`}
+                          onClick={() => setSelectedEventList({
+                            date: key,
+                            type,
+                            rows: events.filter(event => event.type === type)
+                          })}
+                        >
+                          <span aria-hidden="true">{type === 'in' ? '↓' : '↑'}</span>
+                          <strong>{count}</strong>
+                        </button>
+                      );
+                    })}
+                  </div>
                   <div className="calendar-count-buttons">
                     {(['in', 'out'] as const).map(type => {
                       const count = events.filter(event => event.type === type).length;
@@ -563,7 +586,7 @@ function ReservationCalendar({ property }: { property: string }) {
                           onClick={() => setSelectedEventList({
                             date: key,
                             type,
-                            rows: events.filter(event => event.type === type).map(event => event.row)
+                            rows: events.filter(event => event.type === type)
                           })}
                         >
                           <span aria-hidden="true">{type === 'in' ? '↓' : '↑'}</span>
@@ -590,9 +613,18 @@ function ReservationCalendar({ property }: { property: string }) {
                       </div>
                     ))}
                     {events.length > 4 && (
-                      <div style={{ fontSize: 11, color: 'var(--muted, #64748b)' }}>
+                      <button
+                        type="button"
+                        className="calendar-more-events"
+                        onClick={() => setSelectedEventList({
+                          date: key,
+                          type: 'all',
+                          rows: events
+                        })}
+                        aria-label={`Show all ${events.length} arrivals and departures on ${key}`}
+                      >
                         +{events.length - 4} more
-                      </div>
+                      </button>
                     )}
                   </div>
                 </div>
@@ -601,7 +633,7 @@ function ReservationCalendar({ property }: { property: string }) {
           </div>
           {selectedEventList && (
             <Modal
-              title={`${selectedEventList.type === 'in' ? 'Check-ins' : 'Check-outs'} · ${selectedEventList.rows.length}`}
+              title={`${selectedEventList.type === 'all' ? 'Arrivals & departures' : selectedEventList.type === 'in' ? 'Check-ins' : 'Check-outs'} · ${selectedEventList.rows.length}`}
               onClose={() => setSelectedEventList(null)}
             >
               <div className="calendar-popup">
@@ -613,11 +645,14 @@ function ReservationCalendar({ property }: { property: string }) {
                     year: 'numeric'
                   })}
                 </p>
-                {selectedEventList.rows.map(row => (
-                  <div className="calendar-popup-row" key={row.id}>
+                {selectedEventList.rows.map(({ row, type }, index) => (
+                  <div className="calendar-popup-row" key={`${row.id}-${type}-${index}`}>
                     <div className="calendar-popup-guest">
                       <strong>{row.guest || 'Guest name unavailable'}</strong>
                       <span>Room {row.room || '—'} · {row.propertyId === 'hotel-a' ? 'Hotel A' : row.propertyId === 'hotel-b' ? 'Hotel B' : (row.property || 'Unknown hotel')}</span>
+                      <span className={`calendar-popup-event-type ${type === 'in' ? 'check-in' : 'check-out'}`}>
+                        {type === 'in' ? '↓ Check-in' : '↑ Check-out'}
+                      </span>
                       <span className="calendar-popup-booking">{row.id}</span>
                     </div>
                     <Badge tone={row.status === 'Checked in' ? 'success' : row.status === 'Arriving today' ? 'info' : 'neutral'}>
