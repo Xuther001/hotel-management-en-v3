@@ -701,11 +701,16 @@ function Reservations({ property }: { property: string }) {
   const [selectedRoom, setSelectedRoom] = useState('');
   const [roomOptions, setRoomOptions] = useState<AnyRow[]>([]);
 
-  const load = () => {
+  const load = async () => {
     setLoading(true);
-    api.reservations(query, property).then(r => setRows(r.data))
-      .catch(e => setError(e.message))
-      .finally(() => setLoading(false));
+    try {
+      const r = await api.reservations(query, property);
+      setRows(r.data);
+    } catch (e: any) {
+      setError(e.message || 'Could not load reservations.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   async function changeReservationStatus(id: string, status: string) {
