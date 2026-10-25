@@ -1198,6 +1198,85 @@ function Finance({section = 'billing'}: {section?: 'billing'|'installments'|'pay
   const loadBills=()=>api.billing().then(r=>setBills(r.data)).catch(()=>{});
   useEffect(()=>{load();},[query]);
   useEffect(()=>{loadBills();},[]);
+
+  // BILLING REGISTER STICKY HEADER
+  useEffect(() => {
+    if (section !== 'billing') return;
+
+    const wrapper = document.querySelector<HTMLElement>('.billing-register-scroll');
+    const table = wrapper?.querySelector<HTMLTableElement>('.billing-register-table');
+    const sourceHead = table?.tHead;
+    const topbar = document.querySelector<HTMLElement>('.topbar');
+
+    if (!wrapper || !table || !sourceHead || !topbar) return;
+
+    const floating = document.createElement('div');
+    floating.className = 'billing-sticky-floating';
+    floating.setAttribute('aria-hidden', 'true');
+
+    const floatingTable = document.createElement('table');
+    floatingTable.className = table.className;
+    floatingTable.style.width = `${table.scrollWidth}px`;
+
+    const floatingHead = sourceHead.cloneNode(true) as HTMLTableSectionElement;
+    floatingTable.appendChild(floatingHead);
+    floating.appendChild(floatingTable);
+    document.body.appendChild(floating);
+
+    const syncHeader = () => {
+      if (window.innerWidth <= 560) {
+        floating.style.display = 'none';
+        return;
+      }
+
+      const wrapperRect = wrapper.getBoundingClientRect();
+      const tableRect = table.getBoundingClientRect();
+      const navBottom = topbar.getBoundingClientRect().bottom;
+
+      const shouldShow =
+        tableRect.top < navBottom &&
+        tableRect.bottom > navBottom &&
+        wrapperRect.bottom > navBottom;
+
+      if (!shouldShow) {
+        floating.style.display = 'none';
+        return;
+      }
+
+      floating.style.display = 'block';
+      floating.style.top = `${navBottom}px`;
+      floating.style.left = `${wrapperRect.left}px`;
+      floating.style.width = `${wrapper.clientWidth}px`;
+
+      floatingTable.style.width = `${table.scrollWidth}px`;
+      floatingTable.style.transform = `translateX(-${wrapper.scrollLeft}px)`;
+
+      const originalCells = Array.from(sourceHead.querySelectorAll('th'));
+      const clonedCells = Array.from(floatingHead.querySelectorAll('th'));
+
+      originalCells.forEach((cell, index) => {
+        const clone = clonedCells[index];
+        if (!clone) return;
+        const width = cell.getBoundingClientRect().width;
+        clone.style.width = `${width}px`;
+        clone.style.minWidth = `${width}px`;
+        clone.style.maxWidth = `${width}px`;
+      });
+    };
+
+    wrapper.addEventListener('scroll', syncHeader, { passive: true });
+    window.addEventListener('scroll', syncHeader, { passive: true });
+    window.addEventListener('resize', syncHeader);
+    syncHeader();
+
+    return () => {
+      wrapper.removeEventListener('scroll', syncHeader);
+      window.removeEventListener('scroll', syncHeader);
+      window.removeEventListener('resize', syncHeader);
+      floating.remove();
+    };
+  }, [section]);
+
   async function submit(e:FormEvent<HTMLFormElement>){e.preventDefault();const f=new FormData(e.currentTarget);await api.createExpense({description:f.get('description'),category:f.get('category'),property:f.get('property'),amount:f.get('amount'),date:f.get('date')});setOpen(false);load();}
   async function saveConfig(e:FormEvent<HTMLFormElement>){e.preventDefault();if(!selected)return;const f=new FormData(e.currentTarget);try{await api.updateBillingSettings(selected.reservationId,{rentalType:f.get('rentalType'),dailyRate:f.get('dailyRate'),monthlyRate:f.get('monthlyRate')});setModal(null);setSelected(null);setError('');loadBills();}catch(err:any){setError(err.message||'Could not save settings.');}}
   async function savePayment(e:FormEvent<HTMLFormElement>){e.preventDefault();if(!selected)return;const f=new FormData(e.currentTarget);try{await api.recordPayment({reservationId:selected.reservationId,amount:f.get('amount'),date:f.get('date'),method:f.get('method'),notes:f.get('notes')});setModal(null);setSelected(null);setError('');loadBills();}catch(err:any){setError(err.message||'Could not record payment.');}}

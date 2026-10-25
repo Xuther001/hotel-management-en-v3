@@ -1827,3 +1827,39 @@
 .sidebar nav{flex:1;min-height:0;overflow-y:auto}
 .nav-sub-link{height:34px;padding-left:40px;font-size:11.5px;gap:10px}
 .nav-sub-link svg{width:16px;height:16px;flex-shrink:0}
+
+
+/* BILLING REGISTER STICKY HEADER
+   Desktop-only floating copy; original table keeps its horizontal scrolling. */
+.billing-sticky-floating {
+  display: none;
+  position: fixed;
+  z-index: 9;
+  overflow: hidden;
+  box-sizing: border-box;
+  background: #fff;
+  border-bottom: 1px solid #edf0f4;
+  box-shadow: 0 3px 8px rgba(23, 43, 77, 0.08);
+  pointer-events: none;
+}
+
+.billing-sticky-floating table {
+  table-layout: fixed;
+  border-collapse: collapse;
+  white-space: nowrap;
+  background: #fff;
+}
+
+.billing-sticky-floating thead th {
+  box-sizing: border-box;
+  background: #fff;
+  padding-top: 14px;
+  padding-bottom: 14px;
+}
+
+/* Keep the existing mobile billing-card layout unchanged. */
+@media (max-width: 560px) {
+  .billing-sticky-floating {
+    display: none !important;
+  }
+}
