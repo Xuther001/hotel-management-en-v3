@@ -328,7 +328,7 @@ function SearchBar({ value, onChange, placeholder = 'Search records...' }: { val
 }
 function formatLengthOfStay(checkIn: string, checkOut: string): string {
   const parseDate = (value: string) => {
-    const match = /^(\\d{4})-(\\d{2})-(\\d{2})$/.exec(value || '');
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value || '');
     if (!match) return null;
 
     const year = Number(match[1]);
