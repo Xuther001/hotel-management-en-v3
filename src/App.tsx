@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode, useRef } from 'react';
 import { NavLink, Route, Routes, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, BedDouble, CalendarDays, Users, Wallet, Package, Wrench,
@@ -629,6 +629,7 @@ function Reservations({ property }: { property: string }) {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
   const [editingReservation, setEditingReservation] = useState<AnyRow | null>(null);
+  const reservationScrollPosition = useRef({ x: 0, y: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const today = (() => {
@@ -733,6 +734,7 @@ function Reservations({ property }: { property: string }) {
   }, [open, selectedProperty]);
 
   function startEditing(row: AnyRow) {
+    reservationScrollPosition.current = { x: window.scrollX, y: window.scrollY };
     setEditingReservation(row);
     setSelectedProperty(row.propertyId);
     setSelectedRoom(String(row.room));
@@ -767,8 +769,6 @@ function Reservations({ property }: { property: string }) {
       note: String(f.get('note') || '').trim()
     };
 
-    const scrollX = window.scrollX;
-    const scrollY = window.scrollY;
 
     try {
       setError('');
@@ -781,8 +781,19 @@ function Reservations({ property }: { property: string }) {
       setEditingReservation(null);
       await load();
 
+      const restorePosition = () => {
+        const { x, y } = reservationScrollPosition.current;
+        window.scrollTo(x, y);
+        document.documentElement.scrollTop = y;
+        document.body.scrollTop = y;
+      };
+
       requestAnimationFrame(() => {
-        window.scrollTo({ left: scrollX, top: scrollY, behavior: 'instant' });
+        restorePosition();
+        requestAnimationFrame(restorePosition);
+        window.setTimeout(restorePosition, 100);
+        window.setTimeout(restorePosition, 300);
+        window.setTimeout(restorePosition, 600);
       });
     } catch (e: any) {
       setError(e.message || 'Could not save reservation.');
