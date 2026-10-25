@@ -1831,7 +1831,7 @@
 
 /* BILLING REGISTER STICKY HEADER
    Desktop-only floating copy; original table keeps its horizontal scrolling. */
-.billing-sticky-floating {
+.finance-sticky-floating {
   display: none;
   position: fixed;
   z-index: 9;
@@ -1843,14 +1843,14 @@
   pointer-events: none;
 }
 
-.billing-sticky-floating table {
+.finance-sticky-floating table {
   table-layout: fixed;
   border-collapse: collapse;
   white-space: nowrap;
   background: #fff;
 }
 
-.billing-sticky-floating thead th {
+.finance-sticky-floating thead th {
   box-sizing: border-box;
   background: #fff;
   padding-top: 14px;
@@ -1859,7 +1859,7 @@
 
 /* Keep the existing mobile billing-card layout unchanged. */
 @media (max-width: 560px) {
-  .billing-sticky-floating {
+  .finance-sticky-floating {
     display: none !important;
   }
 }

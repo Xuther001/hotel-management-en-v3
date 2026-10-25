@@ -1201,17 +1201,21 @@ function Finance({section = 'billing'}: {section?: 'billing'|'installments'|'pay
 
   // BILLING REGISTER STICKY HEADER
   useEffect(() => {
-    if (section !== 'billing') return;
+    if (section !== 'billing' && section !== 'installments') return;
 
-    const wrapper = document.querySelector<HTMLElement>('.billing-register-scroll');
-    const table = wrapper?.querySelector<HTMLTableElement>('.billing-register-table');
+    const wrapper = document.querySelector<HTMLElement>(
+      section === 'billing' ? '.billing-register-scroll' : '.installment-breakdown-scroll'
+    );
+    const table = wrapper?.querySelector<HTMLTableElement>(
+      section === 'billing' ? '.billing-register-table' : '.installment-breakdown-table'
+    );
     const sourceHead = table?.tHead;
     const topbar = document.querySelector<HTMLElement>('.topbar');
 
     if (!wrapper || !table || !sourceHead || !topbar) return;
 
     const floating = document.createElement('div');
-    floating.className = 'billing-sticky-floating';
+    floating.className = 'finance-sticky-floating';
     floating.setAttribute('aria-hidden', 'true');
 
     const floatingTable = document.createElement('table');
