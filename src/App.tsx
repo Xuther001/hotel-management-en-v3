@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode, useRef } from 'react';
-import { NavLink, Route, Routes, useLocation } from 'react-router-dom';
+import { Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, BedDouble, CalendarDays, Users, Wallet, Package, Wrench,
   ChartNoAxesCombined, Settings, Bell, Search, Menu, Plus, ArrowUpRight, ArrowDownRight,
@@ -61,7 +61,7 @@ type AuthUser = {
   role: string;
   propertyIds?: string[];
 };
-const navGroups = [
+const navGroups: { label: string; items: { to: string; label: string; icon: any; nested?: boolean }[] }[] = [
   { label: 'WORKSPACE', items: [
     { to: '/', label: 'Dashboard', icon: LayoutDashboard },
     { to: '/reservations', label: 'Reservations', icon: CalendarDays },
@@ -71,6 +71,10 @@ const navGroups = [
   { label: 'OPERATIONS', items: [
     { to: '/employees', label: 'Human resources', icon: Users },
     { to: '/finance', label: 'Finance & expenses', icon: Wallet },
+    { to: '/finance/billing', label: 'Guest billing register', icon: FileText, nested: true },
+    { to: '/finance/installments', label: 'Monthly installment breakdown', icon: CalendarDays, nested: true },
+    { to: '/finance/payments', label: 'Payment history', icon: CircleDollarSign, nested: true },
+    { to: '/finance/expenses', label: 'Expenses', icon: Wallet, nested: true },
     { to: '/inventory', label: 'Inventory', icon: Package },
     { to: '/maintenance', label: 'Maintenance', icon: Wrench },
 
@@ -82,7 +86,12 @@ const navGroups = [
 ];
 const titleMap: Record<string, string> = {
   '/': 'Business overview', '/reservations': 'Reservations', '/reservation-calendar': 'Reservation Calendar', '/rooms': 'Room management',
-  '/employees': 'Human resources', '/finance': 'Finance & expenses', '/inventory': 'Inventory',
+  '/employees': 'Human resources', '/finance': 'Finance & expenses',
+  '/finance/billing': 'Guest billing register',
+  '/finance/installments': 'Monthly installment breakdown',
+  '/finance/payments': 'Payment history',
+  '/finance/expenses': 'Expenses',
+  '/inventory': 'Inventory',
   '/maintenance': 'Maintenance', '/reports': 'Reports & analytics', '/settings': 'Settings'
 };
 function Badge({ children, tone = 'neutral' }: { children: ReactNode; tone?: string }) {
@@ -202,7 +211,7 @@ function AuthenticatedApp({ user, onLogout }: { user: AuthUser; onLogout: () => 
     <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
       <div className="brand"><div className="brand-mark"><Building2 size={20}/></div><div><strong>Haven Group</strong><span>BUSINESS MANAGEMENT</span></div><button className="icon-button mobile-close" onClick={() => setSidebarOpen(false)}><X size={18}/></button></div>
       <div className="workspace-select"><div className="workspace-icon"><Building2 size={17}/></div><div><span>WORKSPACE</span><strong>Hospitality Group</strong></div><ChevronDown size={15}/></div>
-      <nav>{navGroups.map(group => <div className="nav-group" key={group.label}><span className="nav-label">{group.label}</span>{group.items.map(item => { const Icon = item.icon; return <NavLink end={item.to === '/'} to={item.to} key={item.to} onClick={() => setSidebarOpen(false)} className={({isActive}) => `nav-link ${isActive ? 'active' : ''}`}><Icon size={18}/><span>{item.label}</span>{item.to === '/reservations' && <small className="nav-count">{reservationCount === null ? "—" : reservationCount}</small>}</NavLink>; })}</div>)}</nav>
+      <nav>{navGroups.map(group => <div className="nav-group" key={group.label}><span className="nav-label">{group.label}</span>{group.items.map(item => { const Icon = item.icon; return <NavLink end={item.to === '/' || item.to === '/finance'} to={item.to} key={item.to} onClick={() => setSidebarOpen(false)} className={({isActive}) => `nav-link ${item.nested ? 'nav-sub-link' : ''} ${isActive ? 'active' : ''}`}><Icon size={item.nested ? 16 : 18}/><span>{item.label}</span>{item.to === '/reservations' && <small className="nav-count">{reservationCount === null ? "—" : reservationCount}</small>}</NavLink>; })}</div>)}</nav>
       <div className="sidebar-bottom"><div className="user-mini"><div className="avatar">{user.name.slice(0, 2).toUpperCase()}</div><div><strong>{user.name}</strong><span>{user.role}</span></div><button className="icon-button" title="Sign out" onClick={onLogout}><LogOut size={16}/></button></div></div>
     </aside>
     {sidebarOpen && <button className="scrim" onClick={() => setSidebarOpen(false)} aria-label="Close navigation"/>}
@@ -214,7 +223,11 @@ function AuthenticatedApp({ user, onLogout }: { user: AuthUser; onLogout: () => 
         <Route path="/reservation-calendar" element={<ReservationCalendar property={property} />} />
         <Route path="/rooms" element={<Rooms property={property}/>} />
         <Route path="/employees" element={<Employees />} />
-        <Route path="/finance" element={<Finance />} />
+        <Route path="/finance" element={<Navigate to="/finance/billing" replace />} />
+        <Route path="/finance/billing" element={<Finance section="billing" />} />
+        <Route path="/finance/installments" element={<Finance section="installments" />} />
+        <Route path="/finance/payments" element={<Finance section="payments" />} />
+        <Route path="/finance/expenses" element={<Finance section="expenses" />} />
         <Route path="/inventory" element={<ComingSoon title="Inventory management" description="Track supplies, stock levels, purchase orders, and transfers between your properties." icon={<Package/>}/>} />
         <Route path="/maintenance" element={<Maintenance />} />
 
@@ -1112,12 +1125,11 @@ function Employees() {
   }
   return <><PageHeader eyebrow="PEOPLE & CULTURE" title="Human resources" description="Employee directory and staffing overview." actions={<Button onClick={() => setOpen(true)}><Plus size={16}/> Add employee</Button>}/><div className="mini-stat-grid"><div><span>Total employees</span><strong>{rows.length}</strong></div><div><span>On shift</span><strong>{rows.filter(r=>r.status==='On shift').length}</strong></div><div><span>Departments</span><strong>{new Set(rows.map(r=>r.department)).size}</strong></div><div><span>Monthly base salaries</span><strong>{money(rows.reduce((s,r)=>s+Number(r.salary||0),0))}</strong></div></div><div className="toolbar"><SearchBar value={query} onChange={setQuery} placeholder="Search employees, roles, departments…"/></div><Panel title="Employee directory" subtitle="Demo records; salary data is shown for prototyping only"><div className="table-scroll"><table><thead><tr><th>EMPLOYEE</th><th>ROLE / DEPARTMENT</th><th>PROPERTY</th><th>STATUS</th><th>MONTHLY BASE</th><th>ACTIONS</th></tr></thead><tbody>{rows.map(r=><tr key={r.id}><td><div className="employee-cell"><div className="avatar">{r.name.split(' ').slice(-1)[0].slice(0,1)}{r.name.split(' ')[0].slice(0,1)}</div><div><strong>{r.name}</strong><span className="cell-sub">{r.id}</span></div></div></td><td><strong>{r.jobTitle}</strong><span className="cell-sub">{r.department}</span></td><td>{r.property}</td><td><Badge tone={r.status==='On shift'?'success':'neutral'}>{r.status}</Badge></td><td className="amount-cell">{money(r.salary)}</td><td><Button variant="secondary" onClick={() => deleteEmployee(r)}>Delete</Button></td></tr>)}</tbody></table></div></Panel>{open && <Modal title="Add employee" onClose={() => setOpen(false)}><form className="form-grid" onSubmit={submit}><label className="span-2">Full name<input name="name" required placeholder="Employee full name"/></label><label>Department<select name="department" value={department} onChange={e => setDepartment(e.target.value)} required><option value="">Select department</option><option value="Front Office">Front Office</option><option value="Housekeeping">Housekeeping</option><option value="Management">Management</option><option value="Finance">Finance</option></select></label><label>Job title<select name="jobTitle" value={department ? jobTitleByDepartment[department] : ""} required disabled={!department}><option value="">Select department first</option>{department && <option value={jobTitleByDepartment[department]}>{jobTitleByDepartment[department]}</option>}</select></label><label>Property<select name="property"><option>Hotel A</option><option>Hotel B</option><option>Group</option></select></label><label>Monthly base salary (VND)<input type="number" name="salary" min="0" defaultValue="9000000"/></label><div className="form-actions span-2"><Button variant="secondary" onClick={() => setOpen(false)}>Cancel</Button><Button type="submit">Save employee</Button></div></form></Modal>}</>;
 }
-function Finance() {
+function Finance({section = 'billing'}: {section?: 'billing'|'installments'|'payments'|'expenses'}) {
   const [rows,setRows] = useState<AnyRow[]>([]);
   const [bills,setBills] = useState<AnyRow[]>([]);
   const [query,setQuery] = useState('');
   const [open,setOpen] = useState(false);
-  const [view,setView] = useState<'expenses'|'billing'>('billing');
   const [modal,setModal] = useState<'configure'|'payment'|'editPayment'|null>(null);
   const [selected,setSelected] = useState<AnyRow|null>(null);
   const [configRentalType,setConfigRentalType] = useState<'Daily'|'Monthly'>('Daily');
@@ -1169,27 +1181,28 @@ function Finance() {
   const dueNow=bills.reduce((s,r)=>s+Number(r.dueNow||0),0), overdueAmount=bills.reduce((s,r)=>s+Number(r.overdueAmount||0),0);
   const monthlyInstallments=bills.flatMap(r=>(r.rentalType==='Monthly'?(r.installments||[]).map((i:any)=>({...i,reservationId:r.reservationId,guest:r.guest,room:r.room})):[])).sort((a,b)=>String(a.dueDate).localeCompare(String(b.dueDate)));
   return <>
-    <PageHeader eyebrow="FINANCE" title="Finance & expenses" description="Track operating expenses, guest charges, payments, and outstanding balances." actions={view==='expenses'?<Button onClick={()=>setOpen(true)}><Plus size={16}/> Record expense</Button>:undefined}/>
-    <div className="toolbar finance-tabs"><Button variant={view==='billing'?'primary':'secondary'} onClick={()=>setView('billing')}>Guest billing</Button><Button variant={view==='expenses'?'primary':'secondary'} onClick={()=>setView('expenses')}>Expenses</Button></div>
-    {view==='expenses'?<>
+    <PageHeader eyebrow="FINANCE" title={section==='billing'?'Guest billing register':section==='installments'?'Monthly installment breakdown':section==='payments'?'Payment history':'Expenses'} description="Manage guest charges, installment schedules, recorded payments, and operating expenses." actions={section==='expenses'?<Button onClick={()=>setOpen(true)}><Plus size={16}/> Record expense</Button>:undefined}/>
+    {section==='expenses'?<>
       <div className="mini-stat-grid"><div><span>Total expenses</span><strong>{money(total)}</strong></div><div><span>Awaiting approval</span><strong>{rows.filter(r=>r.status==='Pending').length}</strong></div><div><span>Approved</span><strong>{rows.filter(r=>r.status==='Approved').length}</strong></div><div><span>Records</span><strong>{rows.length}</strong></div></div>
       <div className="toolbar"><SearchBar value={query} onChange={setQuery} placeholder="Search expense records…"/></div>
       <Panel title="Expense register" subtitle="Existing expense records are preserved"><div className="table-scroll"><table><thead><tr><th>DATE / REFERENCE</th><th>DESCRIPTION</th><th>CATEGORY</th><th>PROPERTY</th><th>STATUS</th><th>AMOUNT</th></tr></thead><tbody>{rows.map(r=><tr key={r.id}><td><strong>{r.date}</strong><span className="cell-sub">{r.id}</span></td><td>{r.description}</td><td>{r.category}</td><td>{r.property}</td><td><Badge tone={r.status==='Approved'?'success':'warning'}>{r.status}</Badge></td><td className="amount-cell">{money(r.amount)}</td></tr>)}</tbody></table></div></Panel>
     </>:<>
+      {section==='billing' && <>
       <div className="mini-stat-grid"><div><span>Guest charges</span><strong>{money(charges)}</strong></div><div><span>Payments recorded</span><strong>{money(paid)}</strong></div><div><span>Outstanding balance</span><strong>{money(balance)}</strong></div><div><span>Due now</span><strong>{money(dueNow)}</strong></div><div><span>Overdue amount</span><strong>{money(overdueAmount)}</strong></div><div><span>Overdue accounts</span><strong>{bills.filter(r=>r.overdueAmount>0).length}</strong></div></div>
       <div className="notice"><AlertTriangle size={17}/><div><strong>Billing rules</strong><span>Daily stays are charged at the configured nightly rate multiplied by the number of nights, due on check-in. Monthly stays are prorated by actual calendar-month days and due by the 5th. Check-in night counts; checkout date does not. Existing reservations default to Daily, and no booking is assumed paid.</span></div></div>
       <Panel title="Guest billing register" subtitle="Billing settings and payments are stored separately from reservations."><div className="table-scroll billing-register-scroll"><table className="billing-register-table"><thead><tr><th>RESERVATION / GUEST</th><th>ROOM</th><th>TYPE</th><th>STAY</th><th>CHARGES</th><th>PAID</th><th>BALANCE</th><th>DUE NOW</th><th>OVERDUE</th><th>OLDEST UNPAID DUE DATE</th><th>STATUS</th><th>ACTIONS</th></tr></thead><tbody>
         {bills.map(r=><tr key={r.reservationId}><td><strong>{r.reservationId}</strong><span className="cell-sub">{r.guest}</span><details className="billing-mobile-details"><summary>View details</summary><div className="billing-mobile-detail-content"><span><strong>Stay:</strong> {r.checkIn} to {r.checkOut}</span><span><strong>Overdue:</strong> {money(r.overdueAmount)}</span><span><strong>Oldest unpaid due date:</strong> {r.dueDate || '—'}</span></div></details></td><td>{r.room}</td><td>{r.rentalType}{r.rentalType==='Monthly'&&r.monthlyRate>0?<span className="cell-sub">{money(r.monthlyRate)}/month</span>:null}</td><td>{r.checkIn}<span className="cell-sub">to {r.checkOut}</span></td><td className="amount-cell">{money(r.charge)}</td><td className="amount-cell">{money(r.paid)}</td><td className="amount-cell"><strong>{money(r.balance)}</strong></td><td className="amount-cell">{money(r.dueNow)}</td><td className="amount-cell">{money(r.overdueAmount)}</td><td>{r.dueDate}</td><td><Badge tone={r.status==='Paid'?'success':r.status==='Overdue'||r.status==='Setup needed'?'warning':'neutral'}>{r.status}</Badge></td><td><div className="table-actions"><Button variant="secondary" onClick={()=>{setSelected(r);setConfigRentalType(r.rentalType==='Monthly'?'Monthly':'Daily');setError('');setModal('configure');}}>Configure</Button><Button onClick={()=>{setSelected(r);setError('');setModal('payment');}} disabled={r.status==='Setup needed'}>Record payment</Button></div></td></tr>)}
         {!bills.length&&<tr><td colSpan={12}>No billable reservations found.</td></tr>}
       </tbody></table></div></Panel>
-      <Panel title="Monthly installment breakdown" subtitle="Each monthly charge is prorated by calendar days. Recorded payments are allocated to the oldest installment first."><div className="table-scroll installment-breakdown-scroll"><table className="installment-breakdown-table"><thead><tr><th>DUE DATE</th><th>RESERVATION / GUEST</th><th>ROOM</th><th>CHARGE</th><th>ALLOCATED PAID</th><th>REMAINING</th><th>STATUS</th></tr></thead><tbody>
+      </>}
+      {section==='installments' && <Panel title="Monthly installment breakdown" subtitle="Each monthly charge is prorated by calendar days. Recorded payments are allocated to the oldest installment first."><div className="table-scroll installment-breakdown-scroll"><table className="installment-breakdown-table"><thead><tr><th>DUE DATE</th><th>RESERVATION / GUEST</th><th>ROOM</th><th>CHARGE</th><th>ALLOCATED PAID</th><th>REMAINING</th><th>STATUS</th></tr></thead><tbody>
         {monthlyInstallments.map((i:any)=><tr key={`${i.reservationId}-${i.dueDate}`}><td>{i.dueDate}</td><td><strong>{i.reservationId}</strong><span className="cell-sub">{i.guest}</span></td><td>{i.room}</td><td className="amount-cell">{money(i.charge)}</td><td className="amount-cell">{money(i.paid)}</td><td className="amount-cell"><strong>{money(i.balance)}</strong></td><td><Badge tone={i.status==='Paid'?'success':i.status==='Overdue'?'warning':i.status==='Due'?'neutral':'info'}>{i.status}</Badge></td></tr>)}
         {!monthlyInstallments.length&&<tr><td colSpan={7}>No monthly installments configured.</td></tr>}
-      </tbody></table></div></Panel>
-      <Panel title="Payment history" subtitle="Actual recorded payments; existing bookings have no assumed payments."><div className="table-scroll payment-history-scroll"><table className="payment-history-table"><thead><tr><th>DATE / PAYMENT</th><th>RESERVATION</th><th>METHOD</th><th>NOTES</th><th>AMOUNT</th><th>ACTIONS</th></tr></thead><tbody>
+      </tbody></table></div></Panel>}
+      {section==='payments' && <Panel title="Payment history" subtitle="Actual recorded payments; existing bookings have no assumed payments."><div className="table-scroll payment-history-scroll"><table className="payment-history-table"><thead><tr><th>DATE / PAYMENT</th><th>RESERVATION</th><th>METHOD</th><th>NOTES</th><th>AMOUNT</th><th>ACTIONS</th></tr></thead><tbody>
         {bills.flatMap(r=>(r.payments||[]).map((p:AnyRow)=>({...p,guest:r.guest}))).sort((a,b)=>String(b.date).localeCompare(String(a.date))).map((p:AnyRow)=><tr key={p.id}><td><strong>{p.date}</strong><span className="cell-sub">{p.id}</span></td><td>{p.reservationId}<span className="cell-sub">{p.guest}</span></td><td>{p.method}</td><td>{p.notes||'—'}</td><td className="amount-cell">{money(p.amount)}</td><td><button type="button" className="reservation-edit-btn" onClick={()=>{setSelectedPayment(p);setError('');setModal('editPayment');}}>Edit</button><span className="payment-delete-button"><Button variant="secondary" onClick={()=>deletePayment(p)}>Delete</Button></span></td></tr>)}
         {!bills.some(r=>(r.payments||[]).length>0)&&<tr><td colSpan={6}>No payments recorded yet.</td></tr>}
-      </tbody></table></div></Panel>
+      </tbody></table></div></Panel>}
     </>}
     {open&&<Modal title="Record an expense" onClose={()=>setOpen(false)}><form className="form-grid" onSubmit={submit}><label className="span-2">Description<input name="description" required placeholder="What was purchased or paid for?"/></label><label>Category<select name="category"><option>Utilities</option><option>Supplies</option><option>Maintenance</option><option>Payroll</option><option>Marketing</option><option>Other</option></select></label><label>Business unit<select name="property"><option>Hotel A</option><option>Hotel B</option></select></label><label>Amount (VND)<input type="number" name="amount" min="1" required/></label><label>Date<input type="date" name="date" defaultValue={today}/></label><div className="form-actions span-2"><Button variant="secondary" onClick={()=>setOpen(false)}>Cancel</Button><Button type="submit">Save expense</Button></div></form></Modal>}
     {modal==='configure'&&selected&&<Modal title={`Billing settings · ${selected.reservationId}`} onClose={()=>{setModal(null);setSelected(null);setError('');}}><form className="form-grid" onSubmit={saveConfig}><p className="span-2">Guest: <strong>{selected.guest}</strong>, room {selected.room}. Billing rates are stored separately from reservation details.</p><label className="span-2">Rental type<select name="rentalType" value={configRentalType} onChange={(e)=>setConfigRentalType(e.target.value as 'Daily'|'Monthly')}><option value="Daily">Daily — rate per night</option><option value="Monthly">Monthly — calendar-day proration</option></select></label>{configRentalType==='Daily'&&<label className="span-2">Daily rate (VND per night)<input name="dailyRate" type="number" min="1" step="any" defaultValue={selected.dailyRate ?? ''} placeholder="Enter daily rate" required/></label>}{configRentalType==='Monthly'&&<label className="span-2">Monthly rent (VND)<input name="monthlyRate" type="number" min="1" step="1" defaultValue={selected.monthlyRate||''} placeholder="Enter monthly rent" required/></label>}{error&&<p className="span-2">{error}</p>}<div className="form-actions span-2"><Button variant="secondary" onClick={()=>{setModal(null);setSelected(null);}}>Cancel</Button><Button type="submit">Save settings</Button></div></form></Modal>}
