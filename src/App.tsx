@@ -612,7 +612,7 @@ function ReservationCalendar({ property }: { property: string }) {
                         <div>{event.row.guest}</div>
                       </div>
                     ))}
-                    {events.length > 4 && (
+                    {events.length > 0 && (
                       <button
                         type="button"
                         className="calendar-more-events"
@@ -623,7 +623,7 @@ function ReservationCalendar({ property }: { property: string }) {
                         })}
                         aria-label={`Show all ${events.length} arrivals and departures on ${key}`}
                       >
-                        +{events.length - 4} more
+                        {events.length > 4 ? `+${events.length - 4} more` : 'View Details'}
                       </button>
                     )}
                   </div>
