@@ -427,6 +427,7 @@ function SearchBar({ value, onChange, placeholder = 'Search records...' }: { val
   return <label className="search-box"><Search size={17}/><input id="global-search" value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}/>{value && <button type="button" onClick={() => onChange('')}><X size={14}/></button>}</label>;
 }
 function formatLengthOfStay(checkIn: string, checkOut: string): string {
+  const isVietnamese = document.documentElement.lang === 'vi';
   const parseDate = (value: string) => {
     const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value || '');
     if (!match) return null;
@@ -458,10 +459,10 @@ function formatLengthOfStay(checkIn: string, checkOut: string): string {
     (end.year - start.year) * 12 + end.month - start.month;
 
   if (months >= 1 && start.day === end.day) {
-    return `${months} ${months === 1 ? 'month' : 'months'}`;
+    return `${months} ${isVietnamese ? 'tháng' : (months === 1 ? 'month' : 'months')}`;
   }
 
-  return `${nights} ${nights === 1 ? 'night' : 'nights'}`;
+  return `${nights} ${isVietnamese ? 'đêm' : (nights === 1 ? 'night' : 'nights')}`;
 }
 
 function ReservationTable({ rows, compact = false, onStatusChange, onDelete, onEdit }: { rows: AnyRow[]; compact?: boolean; onStatusChange?: (id: string, status: string) => void; onDelete?: (id: string, guest: string) => void; onEdit?: (row: AnyRow) => void }) {
