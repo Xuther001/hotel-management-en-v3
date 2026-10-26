@@ -1484,7 +1484,24 @@ function Finance({section = 'billing'}: {section?: 'billing'|'installments'|'pay
       <Panel title="Expense register" subtitle="Existing expense records are preserved"><div className="table-scroll"><table><thead><tr><th>DATE / REFERENCE</th><th>DESCRIPTION</th><th>CATEGORY</th><th>PROPERTY</th><th>STATUS</th><th>AMOUNT</th></tr></thead><tbody>{expenseRows.map(r=><tr key={r.id}><td><strong>{r.date}</strong><span className="cell-sub">{r.id}</span></td><td>{r.description}</td><td>{r.category}</td><td>{r.property}</td><td><Badge tone={r.status==='Approved'?'success':'warning'}>{r.status}</Badge></td><td className="amount-cell">{money(r.amount)}</td></tr>)}{!expenseRows.length&&<tr><td colSpan={6}>No expenses recorded in this period.</td></tr>}</tbody></table></div></Panel>
     </>:<>
       {section==='billing' && <>
-      <div className="mini-stat-grid"><div><span>Guest charges</span><strong>{money(charges)}</strong></div><div><span>Payments recorded</span><strong>{money(paid)}</strong></div><div><span>{period==='all'?'Outstanding balance':'Outstanding at period end'}</span><strong>{money(balance)}</strong></div><div><span>{period==='all'?'Due now':'Charges due by cutoff'}</span><strong>{money(dueNow)}</strong></div><div><span>Overdue amount</span><strong>{money(overdueAmount)}</strong></div><div><span>Overdue accounts</span><strong>{historicalBills.filter(r=>r.overdueAmount>0).length}</strong></div></div>
+      {period === 'all' ? (
+        <div className="mini-stat-grid">
+          <div><span>Guest charges</span><strong>{money(charges)}</strong></div>
+          <div><span>Payments recorded</span><strong>{money(paid)}</strong></div>
+          <div><span>Outstanding balance</span><strong>{money(balance)}</strong></div>
+          <div><span>Due now</span><strong>{money(dueNow)}</strong></div>
+          <div><span>Overdue amount</span><strong>{money(overdueAmount)}</strong></div>
+          <div><span>Overdue accounts</span><strong>{historicalBills.filter(r=>r.overdueAmount>0).length}</strong></div>
+        </div>
+      ) : (
+        <div className="mini-stat-grid">
+          <div><span>Charges due this period</span><strong>{money(charges)}</strong></div>
+          <div><span>Payments recorded this period</span><strong>{money(paid)}</strong></div>
+          <div><span>Outstanding at period end</span><strong>{money(balance)}</strong></div>
+          <div><span>Overdue amount at cutoff</span><strong>{money(overdueAmount)}</strong></div>
+          <div><span>Overdue accounts</span><strong>{historicalBills.filter(r=>r.overdueAmount>0).length}</strong></div>
+        </div>
+      )}
       <div className="notice"><AlertTriangle size={17}/><div><strong>Billing rules</strong><span>Daily stays are charged at the configured nightly rate multiplied by the number of nights, due on check-in. Monthly stays are prorated by actual calendar-month days and billed on each monthly check-in anniversary. Unpaid monthly bills have a grace period through noon on the fifth calendar day, Ho Chi Minh City time. Check-in night counts; checkout date does not. Existing reservations default to Daily, and no booking is assumed paid.</span></div></div>
       <div className="reservation-tabs billing-status-tabs" role="tablist" aria-label="Filter billing entries by status">
         {['Overdue', 'Due', 'Upcoming', 'Paid', 'Setup needed', 'All'].map(status => (
