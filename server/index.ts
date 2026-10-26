@@ -412,6 +412,7 @@ function addActivity(
     text,
     by,
     time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    timestamp: new Date().toISOString(),
     ...(details.length ? { details } : {})
   });
 }
@@ -1658,7 +1659,8 @@ app.post('/api/v1/billing/payments', (req, res) => {
   d.payments.unshift(payment);
   if (!Array.isArray(d.activity)) d.activity = [];
   d.activity.unshift({ id: Date.now(), text: `Payment recorded for reservation ${reservationId}`,
-    by: activityActor(req), time: new Date().toISOString().slice(11, 16) });
+    by: activityActor(req), time: new Date().toISOString().slice(11, 16),
+    timestamp: new Date().toISOString() });
   writeData(d);
   res.status(201).json({ data: payment, billing: getBillingRows(d).find((x: AnyRecord) => x.reservationId === reservationId) });
 });
@@ -1704,7 +1706,8 @@ app.patch('/api/v1/billing/payments/:paymentId', (req, res) => {
     id: Date.now(),
     text: `Payment ${payment.id} edited for ${payment.reservationId}: amount ${before.amount} -> ${payment.amount}; date ${before.date} -> ${payment.date}; method ${before.method} -> ${payment.method}`,
     by: activityActor(req),
-    time: new Date().toISOString().slice(11, 16)
+    time: new Date().toISOString().slice(11, 16),
+    timestamp: new Date().toISOString()
   });
 
   writeData(d);
@@ -1731,7 +1734,8 @@ app.delete('/api/v1/billing/payments/:paymentId', (req, res) => {
     id: Date.now(),
     text: `Payment ${payment.id} deleted for reservation ${payment.reservationId}: ${payment.amount} VND`,
     by: activityActor(req),
-    time: new Date().toISOString().slice(11, 16)
+    time: new Date().toISOString().slice(11, 16),
+    timestamp: new Date().toISOString()
   });
 
   writeData(d);

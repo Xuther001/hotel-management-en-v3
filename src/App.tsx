@@ -266,6 +266,10 @@ function StatCard({ title, value, change, icon, positive = true, note }: { title
 }
 function Dashboard({ property }: { property: string }) {
   const [data, setData] = useState<AnyRow | null>(null);
+  const [activityMonth, setActivityMonth] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  });
   const [error, setError] = useState('');
   const [refresh, setRefresh] = useState(0);
   const [popularityPeriod, setPopularityPeriod] = useState('30');
@@ -354,7 +358,57 @@ function Dashboard({ property }: { property: string }) {
         <div className="attention-list">{data.tasks.map((task: AnyRow) => <div className="attention-item" key={task.id}><div className={`attention-icon ${task.priority === 'High' ? 'urgent' : ''}`}><AlertTriangle size={16}/></div><div className="attention-text"><strong>{task.title}</strong><span>{task.property} · {task.assignee}</span></div><Badge tone={task.status === 'Overdue' ? 'danger' : 'warning'}>{task.status}</Badge></div>)}</div>
       </Panel>
     </div>
-    <Panel title="Recent activity" subtitle="Latest updates across your business"><div className="activity-list">{data.activity.map((a: AnyRow) => <div className="activity-item" key={a.id}><div className="activity-dot"><CheckCircle2 size={16}/></div><div className="activity-content"><strong>{a.text}</strong>{Array.isArray(a.details) && a.details.length > 0 && <div className="activity-details">{a.details.map((change: AnyRow, index: number) => <div className="activity-change" key={`${a.id}-${index}`}><strong>{change.field}:</strong> <span>{change.from} → {change.to}</span></div>)}</div>}<span className="activity-by">{a.by}</span></div><time>{a.time}</time></div>)}</div></Panel>
+    <Panel title="Recent activity" subtitle="Latest updates across your business">
+      {(() => {
+        const activities = Array.isArray(data.activity) ? data.activity : [];
+        const getActivityDate = (a: AnyRow): Date | null => {
+          if (a.timestamp) {
+            const parsed = new Date(a.timestamp);
+            if (!Number.isNaN(parsed.getTime())) return parsed;
+          }
+          const id = Number(a.id);
+          if (Number.isFinite(id) && id >= 1000000000000) {
+            const parsed = new Date(id);
+            if (!Number.isNaN(parsed.getTime())) return parsed;
+          }
+          return null;
+        };
+        const now = new Date();
+        const months = Array.from({ length: 12 }, (_, index) => {
+          const date = new Date(now.getFullYear(), now.getMonth() - index, 1);
+          return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        });
+        const filteredActivities = activities.filter((a: AnyRow) => {
+          const date = getActivityDate(a);
+          if (!date) return false;
+          const year = date.getFullYear();
+          const month = String(date.getMonth() + 1).padStart(2, '0');
+          const key = `${year}-${month}`;
+          return months.includes(key) && key === activityMonth;
+        });
+        return <>
+          <div className="activity-filter">
+            <label htmlFor="activity-month-filter">View</label>
+            <select
+              id="activity-month-filter"
+              value={activityMonth}
+              onChange={e => setActivityMonth(e.target.value)}
+            >
+
+              {months.map(month => {
+                const [year, number] = month.split('-');
+                const label = new Date(Number(year), Number(number) - 1, 1)
+                  .toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+                return <option key={month} value={month}>{label}</option>;
+              })}
+            </select>
+          </div>
+          {filteredActivities.length > 0
+            ? <div className="activity-list">{filteredActivities.map((a: AnyRow) => <div className="activity-item" key={a.id}><div className="activity-dot"><CheckCircle2 size={16}/></div><div className="activity-content"><strong>{a.text}</strong>{Array.isArray(a.details) && a.details.length > 0 && <div className="activity-details">{a.details.map((change: AnyRow, index: number) => <div className="activity-change" key={`${a.id}-${index}`}><strong>{change.field}:</strong> <span>{change.from} → {change.to}</span></div>)}</div>}<span className="activity-by">{a.by}</span></div><time>{a.time}</time></div>)}</div>
+            : <div className="activity-filter-empty">No activity recorded for this month.</div>}
+        </>;
+      })()}
+    </Panel>
   </>;
 }
 function SearchBar({ value, onChange, placeholder = 'Search records...' }: { value: string; onChange: (v:string)=>void; placeholder?: string }) {
