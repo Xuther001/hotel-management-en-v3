@@ -1943,3 +1943,33 @@
     padding: 10px;
   }
 }
+
+
+/* Hotel selector sizing fix - desktop and mobile */
+@media (min-width: 561px) {
+  .property-filter {
+    flex-shrink: 0;
+  }
+  .property-filter select {
+    font-size: 12px;
+    width: 130px;
+    max-width: 160px;
+  }
+}
+
+@media (max-width: 560px) {
+  .property-filter {
+    width: auto;
+    max-width: 155px;
+    min-width: 0;
+    flex-shrink: 1;
+    gap: 5px;
+    padding: 0 7px;
+  }
+  .property-filter select {
+    width: 100px;
+    min-width: 0;
+    max-width: 100px;
+    font-size: 11px;
+  }
+}
