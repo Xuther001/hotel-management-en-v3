@@ -555,19 +555,23 @@ function ReservationCalendar({ property }: { property: string }) {
               const events = eventsFor(key);
               return (
                 <div key={key} className="reservation-calendar-day" style={{
-                  background: 'var(--surface, white)',
+                  background: isToday ? '#f3e8ff' : 'var(--surface, white)',
                   minWidth: 0,
                   minHeight: 112,
                   padding: 5,
                   opacity: inMonth ? 1 : 0.48,
-                  outline: isToday ? '2px solid #2563eb' : undefined,
-                  outlineOffset: -2
+                  border: isToday ? '3px solid #7e22ce' : undefined,
+                  outline: isToday ? '2px solid #7e22ce' : undefined,
+                  outlineOffset: -2,
+                  boxShadow: 'none',
+                  position: 'relative',
+                  zIndex: isToday ? 1 : undefined
                 }}>
                   <div style={{
                     fontSize: 12,
                     fontWeight: isToday ? 800 : 600,
                     marginBottom: 5,
-                    color: isToday ? '#2563eb' : 'inherit'
+                    color: isToday ? '#6b21a8' : 'inherit'
                   }}>
                     {day.getDate()}{isToday ? ' · Today' : ''}
                   </div>
