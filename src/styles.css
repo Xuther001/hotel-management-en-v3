@@ -2070,3 +2070,20 @@
     font-weight: 800;
   }
 }
+
+
+/* Emphasize guest names in Payment history on desktop and mobile */
+.payment-history-table .payment-guest-name {
+  display: block;
+  margin-top: 5px;
+  color: #243650;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.4;
+}
+
+@media (max-width: 560px) {
+  .payment-history-table .payment-guest-name {
+    font-size: 15px;
+  }
+}
