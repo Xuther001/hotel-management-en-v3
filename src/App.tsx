@@ -1062,7 +1062,7 @@ function Rooms({ property }: { property: string }) {
       let subscription: PushSubscription | null = await registration.pushManager.getSubscription();
 
       if (!subscription) {
-        const keyResponse = await fetch('/api/v1/push/public-key');
+        const keyResponse = await fetch(`${API_URL}/push/public-key`, { headers: { Authorization: `Bearer ${localStorage.getItem('hotel_auth_token') || ''}` } });
         const keyData = await keyResponse.json();
         if (!keyResponse.ok || !keyData.publicKey) {
           throw new Error(keyData.error || 'Could not get the push notification key.');
@@ -1074,9 +1074,12 @@ function Rooms({ property }: { property: string }) {
         });
       }
 
-      const saveResponse = await fetch('/api/v1/push/subscribe', {
+      const saveResponse = await fetch(`${API_URL}/push/subscribe`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('hotel_auth_token') || ''}`
+        },
         body: JSON.stringify(subscription)
       });
       const saveData = await saveResponse.json();

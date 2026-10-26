@@ -401,6 +401,41 @@ function activityActor(req: express.Request): string {
   return String(user?.username || user?.name || 'Unknown user');
 }
 
+async function notifyOtherUsers(
+  req: express.Request,
+  title: string,
+  body: string,
+  url = '/'
+) {
+  const actorId = String((req as any).authUser?.id || '');
+  if (!actorId || !configureWebPush()) return;
+
+  // Old subscriptions without an account association are intentionally skipped.
+  const subscriptions = readPushSubscriptions().filter(
+    (s: any) => typeof s.userId === 'string' &&
+      s.userId.length > 0 &&
+      s.userId !== actorId
+  );
+
+  const payload = JSON.stringify({ title, body, url });
+
+  await Promise.all(subscriptions.map(async (subscription: any) => {
+    try {
+      await webpush.sendNotification(subscription, payload);
+    } catch (error: any) {
+      if (error?.statusCode === 404 || error?.statusCode === 410) {
+        try {
+          removePushSubscription(subscription.endpoint);
+        } catch (removeError) {
+          console.error('Could not remove expired subscription:', removeError);
+        }
+      } else {
+        console.error('Push notification failed:', error?.message || error);
+      }
+    }
+  }));
+}
+
 function addActivity(
   data: AnyRecord,
   text: string,
@@ -680,6 +715,9 @@ app.post('/api/v1/admin/users', requireAdmin, (req, res) => {
 
   users.push(user);
   saveAuthUsers(users);
+  void notifyOtherUsers(req, 'Account created',
+    `An account was created for ${user.username}.`, '/settings')
+    .catch(error => console.error('Could not dispatch account notification:', error));
   res.status(201).json({ data: publicUser(user) });
 });
 
@@ -748,6 +786,11 @@ app.patch('/api/v1/admin/users/:id', requireAdmin, (req, res) => {
     JSON.stringify([...propertyIds].sort()) !==
       JSON.stringify([...(user.propertyIds || ['all'])].sort());
 
+  const profileChanged =
+    name !== user.name ||
+    jobTitle !== user.jobTitle ||
+    accessChanged;
+
   user.name = name;
   user.jobTitle = jobTitle;
   user.role = role;
@@ -755,6 +798,12 @@ app.patch('/api/v1/admin/users/:id', requireAdmin, (req, res) => {
   saveAuthUsers(users);
 
   if (accessChanged) revokeSessionsForUser(user.id);
+
+  if (profileChanged) {
+    void notifyOtherUsers(req, 'Account updated',
+      `The profile or access settings for ${user.username} were updated.`, '/settings')
+      .catch(error => console.error('Could not dispatch account notification:', error));
+  }
 
   res.json({ data: publicUser(user), message: 'User profile updated successfully.' });
 });
@@ -773,6 +822,9 @@ app.patch('/api/v1/admin/users/:id/password', requireAdmin, (req, res) => {
   user.passwordHash = hashPassword(password, user.salt);
   saveAuthUsers(users);
   revokeSessionsForUser(user.id);
+  void notifyOtherUsers(req, 'Account password reset',
+    `The password for account ${user.username} was reset by an administrator.`, '/settings')
+    .catch(error => console.error('Could not dispatch password-reset notification:', error));
   res.json({ message: 'Password updated successfully.' });
 });
 
@@ -792,6 +844,9 @@ app.delete('/api/v1/admin/users/:id', requireAdmin, (req, res) => {
 
   saveAuthUsers(users.filter(u => u.id !== target.id));
   revokeSessionsForUser(target.id);
+  void notifyOtherUsers(req, 'Account deleted',
+    `Account ${target.username} was deleted by an administrator.`, '/settings')
+    .catch(error => console.error('Could not dispatch account-deletion notification:', error));
   res.json({ message: 'User deleted successfully.' });
 });
 
@@ -1060,6 +1115,9 @@ app.post('/api/v1/reservations', (req, res) => {
     { key: 'note', label: 'Reservation note' }
   ]), activityActor(req));
   writeData(d);
+  void notifyOtherUsers(req, 'Reservation created',
+    `Reservation ${id} was created for ${item.guest}.`, '/reservations')
+    .catch(error => console.error('Could not dispatch reservation notification:', error));
   res.status(201).json({ data: item });
 });
 app.patch('/api/v1/reservations/:id', (req, res) => {
@@ -1198,6 +1256,11 @@ app.patch('/api/v1/reservations/:id', (req, res) => {
   }
 
   writeData(d);
+  if (reservationChanges.length || automaticRoomChanges.length) {
+    void notifyOtherUsers(req, 'Reservation updated',
+      `Reservation ${item.id} for ${item.guest} was updated.`, '/reservations')
+      .catch(error => console.error('Could not dispatch reservation notification:', error));
+  }
   res.json({ data: item });
 });
 app.delete('/api/v1/reservations/:id', (req, res) => {
@@ -1222,6 +1285,9 @@ app.delete('/api/v1/reservations/:id', (req, res) => {
   ], activityActor(req));
 
   writeData(d);
+  void notifyOtherUsers(req, 'Reservation deleted',
+    `Reservation ${deleted.id} for ${deleted.guest} was deleted.`, '/reservations')
+    .catch(error => console.error('Could not dispatch reservation notification:', error));
   res.json({ message: 'Reservation permanently deleted.', data: deleted });
 });
 
@@ -1249,10 +1315,16 @@ app.post('/api/v1/push/subscribe', (req, res) => {
   }
 
   try {
+    const user = (req as any).authUser;
+    const savedSubscription = {
+      ...subscription,
+      userId: String(user.id),
+      username: String(user.username || '')
+    };
     const subscriptions = readPushSubscriptions();
     const index = subscriptions.findIndex((s: any) => s.endpoint === subscription.endpoint);
-    if (index >= 0) subscriptions[index] = subscription;
-    else subscriptions.push(subscription);
+    if (index >= 0) subscriptions[index] = savedSubscription;
+    else subscriptions.push(savedSubscription);
     writePushSubscriptions(subscriptions);
     res.status(201).json({ ok: true });
   } catch (error) {
@@ -1308,34 +1380,14 @@ app.patch('/api/v1/rooms/:id/status', async (req, res) => {
     writeData(d);
   }
 
-  const isTransitionToClean =
-    changed &&
-    field === 'housekeepingStatus' &&
-    previousValue !== 'Clean' &&
-    item.housekeepingStatus === 'Clean';
-  const pushConfigured = isTransitionToClean ? configureWebPush() : false;
-  const subscriptions = isTransitionToClean ? readPushSubscriptions() : [];
-
-  if (isTransitionToClean && pushConfigured) {
-    const property = d.properties.find((x: AnyRecord) => x.id === item.propertyId);
-    const payload = JSON.stringify({
-      title: 'Room marked Clean',
-      body: `Room ${item.number} at ${property?.name || 'your hotel'} is now Clean.`,
-      url: '/rooms'
-    });
-
-    await Promise.all(subscriptions.map(async (subscription: any) => {
-      try {
-        await webpush.sendNotification(subscription, payload);
-      } catch (error: any) {
-        if (error?.statusCode === 404 || error?.statusCode === 410) {
-          try { removePushSubscription(subscription.endpoint); }
-          catch (removeError) { console.error('Could not remove expired subscription:', removeError); }
-        } else {
-          console.error('Push notification failed:', error?.message || error);
-        }
-      }
-    }));
+  if (changed) {
+    const statusLabel = field === 'occupancyStatus' ? 'occupancy' : 'housekeeping';
+    void notifyOtherUsers(
+      req,
+      'Room status updated',
+      `Room ${item.number}: ${statusLabel} changed to ${value}.`,
+      '/rooms'
+    ).catch(error => console.error('Could not dispatch room notification:', error));
   }
 
   res.json({ data: item });
@@ -1357,6 +1409,9 @@ app.patch('/api/v1/rooms/:id/note', (req, res) => {
       { field: 'Room notes', from: previousNote || '(empty)', to: req.body.note || '(empty)' }
     ], activityActor(req));
     writeData(d);
+    void notifyOtherUsers(req, 'Room notes updated',
+      `Notes for room ${item.number} were changed.`, '/rooms')
+      .catch(error => console.error('Could not dispatch room-note notification:', error));
   }
   res.json({ data: item });
 });
@@ -1365,7 +1420,11 @@ app.get('/api/v1/employees', (req, res) => res.json(list(readData().employees, r
 app.post('/api/v1/employees', (req, res) => {
   const d = readData(); if (!req.body.name || !String(req.body.name).trim()) return res.status(400).json({ error: 'Employee name is required.' }); const approvedJobTitles: Record<string, string> = { 'Front Office': 'Receptionist', Housekeeping: 'Housekeeper', Management: 'Hotel Manager', Finance: 'Accountant' }; if (!req.body.department || !Object.prototype.hasOwnProperty.call(approvedJobTitles, req.body.department) || req.body.jobTitle !== approvedJobTitles[req.body.department]) return res.status(400).json({ error: 'Select a valid department and its approved job title.' });
   const item = { id: `EMP-${String(d.employees.length + 1).padStart(3, '0')}`, name: req.body.name, jobTitle: req.body.jobTitle, property: req.body.property || 'Group', status: 'Active', department: req.body.department || 'General', salary: Number(req.body.salary || 0) };
-  d.employees.push(item); writeData(d); res.status(201).json({ data: item });
+  d.employees.push(item); writeData(d);
+  void notifyOtherUsers(req, 'Employee added',
+    `Employee ${item.name} was added.`, '/employees')
+    .catch(error => console.error('Could not dispatch employee notification:', error));
+  res.status(201).json({ data: item });
 });
 app.delete('/api/v1/employees/:id', (req, res) => {
   const d = readData();
@@ -1373,12 +1432,19 @@ app.delete('/api/v1/employees/:id', (req, res) => {
   if (index === -1) return res.status(404).json({ error: 'Employee not found.' });
   const [deleted] = d.employees.splice(index, 1);
   writeData(d);
+  void notifyOtherUsers(req, 'Employee deleted',
+    `Employee ${deleted.name} was deleted.`, '/employees')
+    .catch(error => console.error('Could not dispatch employee notification:', error));
   res.json({ data: deleted, message: 'Employee deleted.' });
 });
 app.get('/api/v1/finance/expenses', (req, res) => res.json(list(readData().expenses, req)));
 app.post('/api/v1/finance/expenses', (req, res) => {
   const d = readData(); const item = { id: `EXP-${String(Date.now()).slice(-5)}`, date: req.body.date || new Date().toISOString().slice(0,10), category: req.body.category || 'Other', property: req.body.property || 'Hotel A', description: req.body.description || 'New expense', amount: Number(req.body.amount || 0), status: 'Pending' };
-  d.expenses.unshift(item); writeData(d); res.status(201).json({ data: item });
+  d.expenses.unshift(item); writeData(d);
+  void notifyOtherUsers(req, 'Expense recorded',
+    `${item.category}: ${item.description} was recorded.`, '/finance/expenses')
+    .catch(error => console.error('Could not dispatch expense notification:', error));
+  res.status(201).json({ data: item });
 });
 
 function getBillingRows(d: AnyRecord) {
@@ -1640,6 +1706,9 @@ app.patch('/api/v1/billing/:reservationId', (req, res) => {
   if (setting) Object.assign(setting, { rentalType, dailyRate, monthlyRate });
   else d.billingSettings.push({ reservationId: r.id, rentalType, dailyRate, monthlyRate });
   writeData(d);
+  void notifyOtherUsers(req, 'Billing settings updated',
+    `Billing settings for reservation ${r.id} were updated.`, '/finance/billing')
+    .catch(error => console.error('Could not dispatch billing notification:', error));
   res.json({ data: getBillingRows(d).find((x: AnyRecord) => x.reservationId === r.id) });
 });
 
@@ -1662,6 +1731,9 @@ app.post('/api/v1/billing/payments', (req, res) => {
     by: activityActor(req), time: new Date().toISOString().slice(11, 16),
     timestamp: new Date().toISOString() });
   writeData(d);
+  void notifyOtherUsers(req, 'Payment recorded',
+    `A payment was recorded for reservation ${reservationId}.`, '/finance/payments')
+    .catch(error => console.error('Could not dispatch payment notification:', error));
   res.status(201).json({ data: payment, billing: getBillingRows(d).find((x: AnyRecord) => x.reservationId === reservationId) });
 });
 
@@ -1711,6 +1783,9 @@ app.patch('/api/v1/billing/payments/:paymentId', (req, res) => {
   });
 
   writeData(d);
+  void notifyOtherUsers(req, 'Payment updated',
+    `Payment ${payment.id} for reservation ${payment.reservationId} was edited.`, '/finance/payments')
+    .catch(error => console.error('Could not dispatch payment notification:', error));
   res.json({
     data: payment,
     billing: getBillingRows(d).find((x: AnyRecord) => x.reservationId === payment.reservationId)
@@ -1739,6 +1814,9 @@ app.delete('/api/v1/billing/payments/:paymentId', (req, res) => {
   });
 
   writeData(d);
+  void notifyOtherUsers(req, 'Payment deleted',
+    `Payment ${payment.id} for reservation ${payment.reservationId} was deleted.`, '/finance/payments')
+    .catch(error => console.error('Could not dispatch payment notification:', error));
   res.json({
     data: payment,
     billing: getBillingRows(d).find(
