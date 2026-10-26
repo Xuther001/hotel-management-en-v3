@@ -1256,7 +1256,23 @@ function Finance({section = 'billing'}: {section?: 'billing'|'installments'|'pay
   const [configRentalType,setConfigRentalType] = useState<'Daily'|'Monthly'>('Daily');
   const [selectedPayment,setSelectedPayment] = useState<AnyRow|null>(null);
   const [error,setError] = useState('');
+  const [period,setPeriod] = useState('all');
   const today = new Date().toISOString().slice(0,10);
+  const monthOptions = Array.from({length:36},(_,index)=>{
+    const date = new Date();
+    date.setDate(1);
+    date.setMonth(date.getMonth()-index);
+    return {
+      value: `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}`,
+      label: date.toLocaleDateString('en-US',{month:'long',year:'numeric'})
+    };
+  });
+  const periodStart = period === 'all' ? '' : `${period}-01`;
+  const monthEnd = period === 'all' ? '' : new Date(
+    Number(period.slice(0,4)),Number(period.slice(5,7)),0
+  ).toISOString().slice(0,10);
+  const cutoffDate = period === 'all' ? '' : (monthEnd < today ? monthEnd : today);
+  const inPeriod = (date:any) => Boolean(date) && date >= periodStart && date <= cutoffDate;
   const load=()=>api.expenses(query).then(r=>setRows(r.data)).catch(()=>{});
   const loadBills=()=>api.billing().then(r=>setBills(r.data)).catch(()=>{});
   useEffect(()=>{load();},[query]);
@@ -1380,19 +1396,95 @@ function Finance({section = 'billing'}: {section?: 'billing'|'installments'|'pay
       setError(err.message||'Could not update payment.');
     }
   }
-  const total=rows.reduce((s,r)=>s+Number(r.amount||0),0);
-  const charges=bills.reduce((s,r)=>s+Number(r.charge||0),0), paid=bills.reduce((s,r)=>s+Number(r.paid||0),0), balance=bills.reduce((s,r)=>s+Number(r.balance||0),0);
-  const dueNow=bills.reduce((s,r)=>s+Number(r.dueNow||0),0), overdueAmount=bills.reduce((s,r)=>s+Number(r.overdueAmount||0),0);
-  const monthlyInstallments=bills.flatMap(r=>(r.rentalType==='Monthly'?(r.installments||[]).map((i:any)=>({...i,reservationId:r.reservationId,guest:r.guest,room:r.room})):[])).sort((a,b)=>String(a.dueDate).localeCompare(String(b.dueDate)));
+  const expenseRows = period === 'all' ? rows : rows.filter(r=>inPeriod(String(r.date||'')));
+  const total = expenseRows.reduce((sum,r)=>sum+Number(r.amount||0),0);
+  const paymentRows = bills.flatMap(r=>(r.payments||[]).map((p:any)=>({...p,guest:r.guest})));
+  const paymentsInPeriod = period === 'all'
+    ? paymentRows
+    : paymentRows.filter(p=>inPeriod(String(p.date||'')));
+  const chargesInPeriod = period === 'all' ? 0 : bills.reduce((sum,r)=>
+    sum+(r.installments||[]).filter((i:any)=>inPeriod(String(i.dueDate||'')))
+      .reduce((sub:number,i:any)=>sub+Number(i.charge||0),0),0);
+
+  // Rebuild historical installment balances using only payments recorded
+  // by the selected cutoff. The current All-time view remains unchanged.
+  const historicalBills: AnyRow[] = period === 'all' ? bills : bills.map(r=>{
+    const installments = (r.installments||[])
+      .map((i:any)=>({...i,paid:0,balance:Math.max(0,Number(i.charge||0))}))
+      .sort((a:any,b:any)=>String(a.dueDate).localeCompare(String(b.dueDate)));
+    const historicalPayments = (r.payments||[])
+      .filter((p:any)=>String(p.date||'')<=cutoffDate)
+      .sort((a:any,b:any)=>String(a.date||'').localeCompare(String(b.date||'')));
+
+    for (const payment of historicalPayments) {
+      let remaining = Math.max(0,Number(payment.amount||0));
+      for (const installment of installments) {
+        if (remaining<=0) break;
+        const applied = Math.min(Number(installment.balance||0),remaining);
+        installment.paid += applied;
+        installment.balance -= applied;
+        remaining -= applied;
+      }
+    }
+
+    const dueInstallments = installments.filter((i:any)=>String(i.dueDate||'')<=cutoffDate);
+    const charge = dueInstallments.reduce((sum:number,i:any)=>sum+Number(i.charge||0),0);
+    const balance = dueInstallments.reduce((sum:number,i:any)=>sum+Number(i.balance||0),0);
+    const overdueAmount = dueInstallments.reduce((sum:number,i:any)=>{
+      if (Number(i.balance||0)<=0) return sum;
+      const due = String(i.dueDate||'');
+      if (r.rentalType!=='Monthly') return due<cutoffDate ? sum+Number(i.balance) : sum;
+      const parts = due.split('-').map(Number);
+      if (parts.length!==3 || !parts[0] || !parts[1] || !parts[2]) return sum;
+      const graceEnd = new Date(Date.UTC(parts[0],parts[1]-1,parts[2]+4))
+        .toISOString().slice(0,10);
+      return graceEnd<=cutoffDate ? sum+Number(i.balance) : sum;
+    },0);
+    const paid = Math.max(0,charge-balance);
+    const status = charge<=0 ? 'Setup needed'
+      : balance<=0 ? 'Paid'
+      : overdueAmount>0 ? 'Overdue' : 'Due';
+    return {
+      ...r, charge, paid, balance, dueNow:charge, overdueAmount,
+      dueDate:dueInstallments.find((i:any)=>Number(i.balance||0)>0)?.dueDate
+        || dueInstallments[0]?.dueDate || r.checkIn,
+      status,
+      installments:dueInstallments,
+      payments:historicalPayments
+    };
+  });
+
+  const charges = period === 'all'
+    ? bills.reduce((sum,r)=>sum+Number(r.charge||0),0)
+    : chargesInPeriod;
+  const paid = period === 'all'
+    ? bills.reduce((sum,r)=>sum+Number(r.paid||0),0)
+    : paymentsInPeriod.reduce((sum,p)=>sum+Number(p.amount||0),0);
+  const balance = historicalBills.reduce((sum,r)=>sum+Number(r.balance||0),0);
+  const dueNow = historicalBills.reduce((sum,r)=>sum+Number(r.dueNow||0),0);
+  const overdueAmount = historicalBills.reduce((sum,r)=>sum+Number(r.overdueAmount||0),0);
+  const monthlyInstallments=bills.flatMap(r=>(r.rentalType==='Monthly'
+    ? (r.installments||[]).filter((i:any)=>period==='all'||inPeriod(String(i.dueDate||'')))
+      .map((i:any)=>({...i,reservationId:r.reservationId,guest:r.guest,room:r.room}))
+    : [])).sort((a,b)=>String(a.dueDate).localeCompare(String(b.dueDate)));
   return <>
     <PageHeader eyebrow="FINANCE" title={section==='billing'?'Guest billing register':section==='installments'?'Monthly installment breakdown':section==='payments'?'Payment history':'Expenses'} description="Manage guest charges, installment schedules, recorded payments, and operating expenses." actions={section==='expenses'?<Button onClick={()=>setOpen(true)}><Plus size={16}/> Record expense</Button>:undefined}/>
+    <div className="toolbar finance-period-toolbar">
+      <label>Reporting period
+        <select value={period} onChange={e=>setPeriod(e.target.value)}>
+          <option value="all">All-time</option>
+          {monthOptions.map(m=><option key={m.value} value={m.value}>{m.label}</option>)}
+        </select>
+      </label>
+      {period!=='all'&&<span className="cell-sub">Figures through {cutoffDate}</span>}
+    </div>
     {section==='expenses'?<>
-      <div className="mini-stat-grid"><div><span>Total expenses</span><strong>{money(total)}</strong></div><div><span>Awaiting approval</span><strong>{rows.filter(r=>r.status==='Pending').length}</strong></div><div><span>Approved</span><strong>{rows.filter(r=>r.status==='Approved').length}</strong></div><div><span>Records</span><strong>{rows.length}</strong></div></div>
+      <div className="mini-stat-grid"><div><span>{period==='all'?'Total expenses':'Expenses this period'}</span><strong>{money(total)}</strong></div><div><span>Awaiting approval</span><strong>{expenseRows.filter(r=>r.status==='Pending').length}</strong></div><div><span>Approved</span><strong>{expenseRows.filter(r=>r.status==='Approved').length}</strong></div><div><span>Records</span><strong>{expenseRows.length}</strong></div></div>
       <div className="toolbar"><SearchBar value={query} onChange={setQuery} placeholder="Search expense records…"/></div>
-      <Panel title="Expense register" subtitle="Existing expense records are preserved"><div className="table-scroll"><table><thead><tr><th>DATE / REFERENCE</th><th>DESCRIPTION</th><th>CATEGORY</th><th>PROPERTY</th><th>STATUS</th><th>AMOUNT</th></tr></thead><tbody>{rows.map(r=><tr key={r.id}><td><strong>{r.date}</strong><span className="cell-sub">{r.id}</span></td><td>{r.description}</td><td>{r.category}</td><td>{r.property}</td><td><Badge tone={r.status==='Approved'?'success':'warning'}>{r.status}</Badge></td><td className="amount-cell">{money(r.amount)}</td></tr>)}</tbody></table></div></Panel>
+      <Panel title="Expense register" subtitle="Existing expense records are preserved"><div className="table-scroll"><table><thead><tr><th>DATE / REFERENCE</th><th>DESCRIPTION</th><th>CATEGORY</th><th>PROPERTY</th><th>STATUS</th><th>AMOUNT</th></tr></thead><tbody>{expenseRows.map(r=><tr key={r.id}><td><strong>{r.date}</strong><span className="cell-sub">{r.id}</span></td><td>{r.description}</td><td>{r.category}</td><td>{r.property}</td><td><Badge tone={r.status==='Approved'?'success':'warning'}>{r.status}</Badge></td><td className="amount-cell">{money(r.amount)}</td></tr>)}{!expenseRows.length&&<tr><td colSpan={6}>No expenses recorded in this period.</td></tr>}</tbody></table></div></Panel>
     </>:<>
       {section==='billing' && <>
-      <div className="mini-stat-grid"><div><span>Guest charges</span><strong>{money(charges)}</strong></div><div><span>Payments recorded</span><strong>{money(paid)}</strong></div><div><span>Outstanding balance</span><strong>{money(balance)}</strong></div><div><span>Due now</span><strong>{money(dueNow)}</strong></div><div><span>Overdue amount</span><strong>{money(overdueAmount)}</strong></div><div><span>Overdue accounts</span><strong>{bills.filter(r=>r.overdueAmount>0).length}</strong></div></div>
+      <div className="mini-stat-grid"><div><span>Guest charges</span><strong>{money(charges)}</strong></div><div><span>Payments recorded</span><strong>{money(paid)}</strong></div><div><span>{period==='all'?'Outstanding balance':'Outstanding at period end'}</span><strong>{money(balance)}</strong></div><div><span>{period==='all'?'Due now':'Charges due by cutoff'}</span><strong>{money(dueNow)}</strong></div><div><span>Overdue amount</span><strong>{money(overdueAmount)}</strong></div><div><span>Overdue accounts</span><strong>{historicalBills.filter(r=>r.overdueAmount>0).length}</strong></div></div>
       <div className="notice"><AlertTriangle size={17}/><div><strong>Billing rules</strong><span>Daily stays are charged at the configured nightly rate multiplied by the number of nights, due on check-in. Monthly stays are prorated by actual calendar-month days and billed on each monthly check-in anniversary. Unpaid monthly bills have a grace period through noon on the fifth calendar day, Ho Chi Minh City time. Check-in night counts; checkout date does not. Existing reservations default to Daily, and no booking is assumed paid.</span></div></div>
       <div className="reservation-tabs billing-status-tabs" role="tablist" aria-label="Filter billing entries by status">
         {['Overdue', 'Due', 'Upcoming', 'Paid', 'Setup needed', 'All'].map(status => (
@@ -1409,8 +1501,8 @@ function Finance({section = 'billing'}: {section?: 'billing'|'installments'|'pay
         ))}
       </div>
       <Panel title="Guest billing register" subtitle="Billing settings and payments are stored separately from reservations."><div className="table-scroll billing-register-scroll"><table className="billing-register-table"><thead><tr><th>RESERVATION / GUEST</th><th>ROOM</th><th>TYPE</th><th>STAY</th><th>CHARGES</th><th>PAID</th><th>BALANCE</th><th>DUE NOW</th><th>OVERDUE</th><th>OLDEST UNPAID DUE DATE</th><th>STATUS</th><th>ACTIONS</th></tr></thead><tbody>
-        {bills.filter(r => billingStatusFilter === 'All' || r.status === billingStatusFilter).map(r=><tr key={r.reservationId}><td><strong>{r.reservationId}</strong><span className="cell-sub">{r.guest}</span><details className="billing-mobile-details"><summary>View details</summary><div className="billing-mobile-detail-content"><span><strong>Stay:</strong> {r.checkIn} to {r.checkOut}</span><span><strong>Overdue:</strong> {money(r.overdueAmount)}</span><span><strong>Oldest unpaid due date:</strong> {r.dueDate || '—'}</span></div></details></td><td>{r.room}</td><td>{r.rentalType}{r.rentalType==='Monthly'&&r.monthlyRate>0?<span className="cell-sub">{money(r.monthlyRate)}/month</span>:null}</td><td>{r.checkIn}<span className="cell-sub">to {r.checkOut}</span></td><td className="amount-cell">{money(r.charge)}</td><td className="amount-cell">{money(r.paid)}</td><td className="amount-cell"><strong>{money(r.balance)}</strong></td><td className="amount-cell">{money(r.dueNow)}</td><td className="amount-cell">{money(r.overdueAmount)}</td><td>{r.dueDate}</td><td><Badge tone={r.status==='Paid'?'success':r.status==='Overdue'||r.status==='Setup needed'?'warning':'neutral'}>{r.status}</Badge></td><td><div className="table-actions"><Button variant="secondary" onClick={()=>{setSelected(r);setConfigRentalType(r.rentalType==='Monthly'?'Monthly':'Daily');setError('');setModal('configure');}}>Configure</Button><Button onClick={()=>{setSelected(r);setError('');setModal('payment');}} disabled={r.status==='Setup needed'}>Record payment</Button></div></td></tr>)}
-        {!bills.filter(r => billingStatusFilter === 'All' || r.status === billingStatusFilter).length&&<tr><td colSpan={12}>No billing entries for this status.</td></tr>}
+         {historicalBills.filter(r => billingStatusFilter === 'All' || r.status === billingStatusFilter).map(r=><tr key={r.reservationId}><td><strong>{r.reservationId}</strong><span className="cell-sub">{r.guest}</span><details className="billing-mobile-details"><summary>View details</summary><div className="billing-mobile-detail-content"><span><strong>Stay:</strong> {r.checkIn} to {r.checkOut}</span><span><strong>Overdue:</strong> {money(r.overdueAmount)}</span><span><strong>Oldest unpaid due date:</strong> {r.dueDate || '—'}</span></div></details></td><td>{r.room}</td><td>{r.rentalType}{r.rentalType==='Monthly'&&r.monthlyRate>0?<span className="cell-sub">{money(r.monthlyRate)}/month</span>:null}</td><td>{r.checkIn}<span className="cell-sub">to {r.checkOut}</span></td><td className="amount-cell">{money(r.charge)}</td><td className="amount-cell">{money(r.paid)}</td><td className="amount-cell"><strong>{money(r.balance)}</strong></td><td className="amount-cell">{money(r.dueNow)}</td><td className="amount-cell">{money(r.overdueAmount)}</td><td>{r.dueDate}</td><td><Badge tone={r.status==='Paid'?'success':r.status==='Overdue'||r.status==='Setup needed'?'warning':'neutral'}>{r.status}</Badge></td><td><div className="table-actions"><Button variant="secondary" onClick={()=>{setSelected(r);setConfigRentalType(r.rentalType==='Monthly'?'Monthly':'Daily');setError('');setModal('configure');}}>Configure</Button><Button onClick={()=>{setSelected(r);setError('');setModal('payment');}} disabled={r.status==='Setup needed'}>Record payment</Button></div></td></tr>)}
+        {!historicalBills.filter(r => billingStatusFilter === 'All' || r.status === billingStatusFilter).length&&<tr><td colSpan={12}>No billing entries for this status.</td></tr>}
       </tbody></table></div></Panel>
       </>}
       {section==='installments' && <Panel title="Monthly installment breakdown" subtitle="Each monthly charge is prorated by calendar days. Recorded payments are allocated to the oldest installment first."><div className="table-scroll installment-breakdown-scroll"><table className="installment-breakdown-table"><thead><tr><th>DUE DATE</th><th>RESERVATION / GUEST</th><th>ROOM</th><th>CHARGE</th><th>ALLOCATED PAID</th><th>REMAINING</th><th>STATUS</th></tr></thead><tbody>
@@ -1418,8 +1510,8 @@ function Finance({section = 'billing'}: {section?: 'billing'|'installments'|'pay
         {!monthlyInstallments.length&&<tr><td colSpan={7}>No monthly installments configured.</td></tr>}
       </tbody></table></div></Panel>}
       {section==='payments' && <Panel title="Payment history" subtitle="Actual recorded payments; existing bookings have no assumed payments."><div className="table-scroll payment-history-scroll"><table className="payment-history-table"><thead><tr><th>DATE / PAYMENT</th><th>RESERVATION</th><th>METHOD</th><th>NOTES</th><th>AMOUNT</th><th>ACTIONS</th></tr></thead><tbody>
-        {bills.flatMap(r=>(r.payments||[]).map((p:AnyRow)=>({...p,guest:r.guest}))).sort((a,b)=>String(b.date).localeCompare(String(a.date))).map((p:AnyRow)=><tr key={p.id}><td><strong>{p.date}</strong><span className="cell-sub">{p.id}</span></td><td>{p.reservationId}<span className="cell-sub">{p.guest}</span></td><td>{p.method}</td><td>{p.notes||'—'}</td><td className="amount-cell">{money(p.amount)}</td><td><button type="button" className="reservation-edit-btn" onClick={()=>{setSelectedPayment(p);setError('');setModal('editPayment');}}>Edit</button><span className="payment-delete-button"><Button variant="secondary" onClick={()=>deletePayment(p)}>Delete</Button></span></td></tr>)}
-        {!bills.some(r=>(r.payments||[]).length>0)&&<tr><td colSpan={6}>No payments recorded yet.</td></tr>}
+        {paymentsInPeriod.sort((a,b)=>String(b.date).localeCompare(String(a.date))).map((p:AnyRow)=><tr key={p.id}><td><strong>{p.date}</strong><span className="cell-sub">{p.id}</span></td><td>{p.reservationId}<span className="cell-sub">{p.guest}</span></td><td>{p.method}</td><td>{p.notes||'—'}</td><td className="amount-cell">{money(p.amount)}</td><td><button type="button" className="reservation-edit-btn" onClick={()=>{setSelectedPayment(p);setError('');setModal('editPayment');}}>Edit</button><span className="payment-delete-button"><Button variant="secondary" onClick={()=>deletePayment(p)}>Delete</Button></span></td></tr>)}
+        {!paymentsInPeriod.length&&<tr><td colSpan={6}>No payments recorded in this period.</td></tr>}
       </tbody></table></div></Panel>}
     </>}
     {open&&<Modal title="Record an expense" onClose={()=>setOpen(false)}><form className="form-grid" onSubmit={submit}><label className="span-2">Description<input name="description" required placeholder="What was purchased or paid for?"/></label><label>Category<select name="category"><option>Utilities</option><option>Supplies</option><option>Maintenance</option><option>Payroll</option><option>Marketing</option><option>Other</option></select></label><label>Business unit<select name="property"><option>Hotel A</option><option>Hotel B</option></select></label><label>Amount (VND)<input type="number" name="amount" min="1" required/></label><label>Date<input type="date" name="date" defaultValue={today}/></label><div className="form-actions span-2"><Button variant="secondary" onClick={()=>setOpen(false)}>Cancel</Button><Button type="submit">Save expense</Button></div></form></Modal>}
