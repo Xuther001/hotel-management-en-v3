@@ -1973,3 +1973,54 @@
     font-size: 11px;
   }
 }
+
+
+/* Mobile header breadcrumb and hotel selector spacing fix */
+@media (max-width: 560px) {
+  .topbar {
+    gap: 8px;
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+
+  .top-left {
+    flex: 1 1 0;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .top-left .mobile-menu {
+    flex: 0 0 34px;
+  }
+
+  .breadcrumbs {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-size: 10px;
+  }
+
+  .breadcrumbs span {
+    margin: 0 4px;
+  }
+
+  .top-actions {
+    flex: 0 0 auto;
+    min-width: 0;
+  }
+
+  .property-filter {
+    max-width: 132px;
+    flex-shrink: 1;
+    gap: 4px;
+    padding-left: 6px;
+    padding-right: 5px;
+  }
+
+  .property-filter select {
+    width: 80px;
+    max-width: 80px;
+    font-size: 11px;
+  }
+}
