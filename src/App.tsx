@@ -1495,7 +1495,7 @@ function Finance({section = 'billing'}: {section?: 'billing'|'installments'|'pay
           >
             {status}
             <span className="billing-status-count">
-              {status === 'All' ? bills.length : bills.filter(r => r.status === status).length}
+              {status === 'All' ? historicalBills.length : historicalBills.filter(r => r.status === status).length}
             </span>
           </Button>
         ))}
