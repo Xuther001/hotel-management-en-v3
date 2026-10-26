@@ -401,6 +401,17 @@ function activityActor(req: express.Request): string {
   return String(user?.username || user?.name || 'Unknown user');
 }
 
+function notificationChangeSummary(changes: any[], maxChanges = 3): string {
+  const items = changes.map(change => {
+    const clean = (value: unknown) =>
+      String(value ?? '(empty)').replace(/\s+/g, ' ').slice(0, 45);
+    return `${change.field}: ${clean(change.from)} → ${clean(change.to)}`;
+  });
+  const visible = items.slice(0, maxChanges);
+  if (items.length > maxChanges) visible.push(`+${items.length - maxChanges} more`);
+  return visible.join('; ');
+}
+
 async function notifyOtherUsers(
   req: express.Request,
   title: string,
@@ -716,7 +727,7 @@ app.post('/api/v1/admin/users', requireAdmin, (req, res) => {
   users.push(user);
   saveAuthUsers(users);
   void notifyOtherUsers(req, 'Account created',
-    `An account was created for ${user.username}.`, '/settings')
+    `${user.username} · Role: ${user.role} · Job title: ${user.jobTitle || 'Not set'} · By: ${activityActor(req)}`, '/settings')
     .catch(error => console.error('Could not dispatch account notification:', error));
   res.status(201).json({ data: publicUser(user) });
 });
@@ -791,6 +802,17 @@ app.patch('/api/v1/admin/users/:id', requireAdmin, (req, res) => {
     jobTitle !== user.jobTitle ||
     accessChanged;
 
+  const profileChanges = [
+    { field: 'Name', from: user.name, to: name },
+    { field: 'Job title', from: user.jobTitle || '(empty)', to: jobTitle || '(empty)' },
+    { field: 'Role', from: user.role, to: role },
+    {
+      field: 'Hotel assignments',
+      from: (user.propertyIds || ['all']).join(', '),
+      to: propertyIds.join(', ')
+    }
+  ].filter(change => String(change.from) !== String(change.to));
+
   user.name = name;
   user.jobTitle = jobTitle;
   user.role = role;
@@ -801,7 +823,7 @@ app.patch('/api/v1/admin/users/:id', requireAdmin, (req, res) => {
 
   if (profileChanged) {
     void notifyOtherUsers(req, 'Account updated',
-      `The profile or access settings for ${user.username} were updated.`, '/settings')
+      `${user.username} · ${notificationChangeSummary(profileChanges, 4)} · By: ${activityActor(req)}`, '/settings')
       .catch(error => console.error('Could not dispatch account notification:', error));
   }
 
@@ -823,7 +845,7 @@ app.patch('/api/v1/admin/users/:id/password', requireAdmin, (req, res) => {
   saveAuthUsers(users);
   revokeSessionsForUser(user.id);
   void notifyOtherUsers(req, 'Account password reset',
-    `The password for account ${user.username} was reset by an administrator.`, '/settings')
+    `Password reset for ${user.username} by ${activityActor(req)}.`, '/settings')
     .catch(error => console.error('Could not dispatch password-reset notification:', error));
   res.json({ message: 'Password updated successfully.' });
 });
@@ -845,7 +867,7 @@ app.delete('/api/v1/admin/users/:id', requireAdmin, (req, res) => {
   saveAuthUsers(users.filter(u => u.id !== target.id));
   revokeSessionsForUser(target.id);
   void notifyOtherUsers(req, 'Account deleted',
-    `Account ${target.username} was deleted by an administrator.`, '/settings')
+    `${target.username} (${target.role}) · Deleted by: ${activityActor(req)}`, '/settings')
     .catch(error => console.error('Could not dispatch account-deletion notification:', error));
   res.json({ message: 'User deleted successfully.' });
 });
@@ -1116,7 +1138,7 @@ app.post('/api/v1/reservations', (req, res) => {
   ]), activityActor(req));
   writeData(d);
   void notifyOtherUsers(req, 'Reservation created',
-    `Reservation ${id} was created for ${item.guest}.`, '/reservations')
+    `${item.guest} · Room ${item.room} · ${item.checkIn} to ${item.checkOut} · ${item.guests} guest(s) · By: ${activityActor(req)}`, '/reservations')
     .catch(error => console.error('Could not dispatch reservation notification:', error));
   res.status(201).json({ data: item });
 });
@@ -1257,8 +1279,14 @@ app.patch('/api/v1/reservations/:id', (req, res) => {
 
   writeData(d);
   if (reservationChanges.length || automaticRoomChanges.length) {
-    void notifyOtherUsers(req, 'Reservation updated',
-      `Reservation ${item.id} for ${item.guest} was updated.`, '/reservations')
+    void notifyOtherUsers(
+      req,
+      reservationChanges.some(change => change.field === 'Status')
+        ? 'Reservation status changed'
+        : 'Reservation details changed',
+      `${item.guest} · Room ${item.room} · ${notificationChangeSummary([...reservationChanges, ...automaticRoomChanges]) || 'Reservation updated'} · By: ${activityActor(req)}`,
+      '/reservations'
+    )
       .catch(error => console.error('Could not dispatch reservation notification:', error));
   }
   res.json({ data: item });
@@ -1286,7 +1314,7 @@ app.delete('/api/v1/reservations/:id', (req, res) => {
 
   writeData(d);
   void notifyOtherUsers(req, 'Reservation deleted',
-    `Reservation ${deleted.id} for ${deleted.guest} was deleted.`, '/reservations')
+    `${deleted.guest} · Room ${deleted.room} · ${deleted.checkIn} to ${deleted.checkOut} · Deleted by: ${activityActor(req)}`, '/reservations')
     .catch(error => console.error('Could not dispatch reservation notification:', error));
   res.json({ message: 'Reservation permanently deleted.', data: deleted });
 });
@@ -1338,6 +1366,16 @@ app.post('/api/v1/push/unsubscribe', (req, res) => {
     return res.status(400).json({ error: 'Subscription endpoint is required.' });
   }
   try {
+    const actorId = String((req as any).authUser?.id || '');
+    if (!actorId) return res.status(401).json({ error: 'Please sign in again.' });
+
+    const subscriptions = readPushSubscriptions();
+    const existing = subscriptions.find((item: any) => item.endpoint === req.body.endpoint);
+
+    if (existing?.userId && existing.userId !== actorId) {
+      return res.status(403).json({ error: 'This device subscription belongs to another account.' });
+    }
+
     removePushSubscription(req.body.endpoint);
     res.json({ ok: true });
   } catch (error) {
@@ -1384,8 +1422,8 @@ app.patch('/api/v1/rooms/:id/status', async (req, res) => {
     const statusLabel = field === 'occupancyStatus' ? 'occupancy' : 'housekeeping';
     void notifyOtherUsers(
       req,
-      'Room status updated',
-      `Room ${item.number}: ${statusLabel} changed to ${value}.`,
+      `Room ${statusLabel} changed`,
+      `Room ${item.number}: ${statusLabel} ${previousValue || '(empty)'} → ${value} · By: ${activityActor(req)}`,
       '/rooms'
     ).catch(error => console.error('Could not dispatch room notification:', error));
   }
@@ -1410,7 +1448,7 @@ app.patch('/api/v1/rooms/:id/note', (req, res) => {
     ], activityActor(req));
     writeData(d);
     void notifyOtherUsers(req, 'Room notes updated',
-      `Notes for room ${item.number} were changed.`, '/rooms')
+      `Room ${item.number}: "${previousNote.slice(0, 45) || '(empty)'}" → "${req.body.note.replace(/\s+/g, ' ').slice(0, 45) || '(empty)'}" · By: ${activityActor(req)}`, '/rooms')
       .catch(error => console.error('Could not dispatch room-note notification:', error));
   }
   res.json({ data: item });
@@ -1422,7 +1460,7 @@ app.post('/api/v1/employees', (req, res) => {
   const item = { id: `EMP-${String(d.employees.length + 1).padStart(3, '0')}`, name: req.body.name, jobTitle: req.body.jobTitle, property: req.body.property || 'Group', status: 'Active', department: req.body.department || 'General', salary: Number(req.body.salary || 0) };
   d.employees.push(item); writeData(d);
   void notifyOtherUsers(req, 'Employee added',
-    `Employee ${item.name} was added.`, '/employees')
+    `${item.name} · ${item.jobTitle} · ${item.property} · By: ${activityActor(req)}`, '/employees')
     .catch(error => console.error('Could not dispatch employee notification:', error));
   res.status(201).json({ data: item });
 });
@@ -1433,7 +1471,7 @@ app.delete('/api/v1/employees/:id', (req, res) => {
   const [deleted] = d.employees.splice(index, 1);
   writeData(d);
   void notifyOtherUsers(req, 'Employee deleted',
-    `Employee ${deleted.name} was deleted.`, '/employees')
+    `${deleted.name} · ${deleted.jobTitle} · Deleted by: ${activityActor(req)}`, '/employees')
     .catch(error => console.error('Could not dispatch employee notification:', error));
   res.json({ data: deleted, message: 'Employee deleted.' });
 });
@@ -1442,7 +1480,7 @@ app.post('/api/v1/finance/expenses', (req, res) => {
   const d = readData(); const item = { id: `EXP-${String(Date.now()).slice(-5)}`, date: req.body.date || new Date().toISOString().slice(0,10), category: req.body.category || 'Other', property: req.body.property || 'Hotel A', description: req.body.description || 'New expense', amount: Number(req.body.amount || 0), status: 'Pending' };
   d.expenses.unshift(item); writeData(d);
   void notifyOtherUsers(req, 'Expense recorded',
-    `${item.category}: ${item.description} was recorded.`, '/finance/expenses')
+    `${item.amount.toLocaleString('en-US')} VND · ${item.category} · ${item.description} · ${item.property} · By: ${activityActor(req)}`, '/finance/expenses')
     .catch(error => console.error('Could not dispatch expense notification:', error));
   res.status(201).json({ data: item });
 });
@@ -1703,11 +1741,18 @@ app.patch('/api/v1/billing/:reservationId', (req, res) => {
 
   if (!Array.isArray(d.billingSettings)) d.billingSettings = [];
   const setting = d.billingSettings.find((x: AnyRecord) => x.reservationId === r.id);
+  const previousBilling = setting
+    ? { rentalType: setting.rentalType, dailyRate: setting.dailyRate, monthlyRate: setting.monthlyRate }
+    : { rentalType: '(unset)', dailyRate: '(unset)', monthlyRate: '(unset)' };
   if (setting) Object.assign(setting, { rentalType, dailyRate, monthlyRate });
   else d.billingSettings.push({ reservationId: r.id, rentalType, dailyRate, monthlyRate });
   writeData(d);
   void notifyOtherUsers(req, 'Billing settings updated',
-    `Billing settings for reservation ${r.id} were updated.`, '/finance/billing')
+    `Reservation ${r.id} · ${r.guest} · ${notificationChangeSummary([
+      { field: 'Rental type', from: previousBilling.rentalType, to: rentalType },
+      { field: 'Daily rate', from: previousBilling.dailyRate, to: dailyRate },
+      { field: 'Monthly rate', from: previousBilling.monthlyRate, to: monthlyRate }
+    ])} · By: ${activityActor(req)}`, '/finance/billing')
     .catch(error => console.error('Could not dispatch billing notification:', error));
   res.json({ data: getBillingRows(d).find((x: AnyRecord) => x.reservationId === r.id) });
 });
@@ -1732,7 +1777,7 @@ app.post('/api/v1/billing/payments', (req, res) => {
     timestamp: new Date().toISOString() });
   writeData(d);
   void notifyOtherUsers(req, 'Payment recorded',
-    `A payment was recorded for reservation ${reservationId}.`, '/finance/payments')
+    `Reservation ${reservationId} · ${payment.amount.toLocaleString('en-US')} VND · ${payment.method} · Date: ${payment.date} · By: ${activityActor(req)}`, '/finance/payments')
     .catch(error => console.error('Could not dispatch payment notification:', error));
   res.status(201).json({ data: payment, billing: getBillingRows(d).find((x: AnyRecord) => x.reservationId === reservationId) });
 });
@@ -1784,7 +1829,11 @@ app.patch('/api/v1/billing/payments/:paymentId', (req, res) => {
 
   writeData(d);
   void notifyOtherUsers(req, 'Payment updated',
-    `Payment ${payment.id} for reservation ${payment.reservationId} was edited.`, '/finance/payments')
+    `Reservation ${payment.reservationId} · ${notificationChangeSummary([
+      { field: 'Amount', from: before.amount.toLocaleString('en-US') + ' VND', to: payment.amount.toLocaleString('en-US') + ' VND' },
+      { field: 'Date', from: before.date, to: payment.date },
+      { field: 'Method', from: before.method, to: payment.method }
+    ])} · By: ${activityActor(req)}`, '/finance/payments')
     .catch(error => console.error('Could not dispatch payment notification:', error));
   res.json({
     data: payment,
@@ -1815,7 +1864,7 @@ app.delete('/api/v1/billing/payments/:paymentId', (req, res) => {
 
   writeData(d);
   void notifyOtherUsers(req, 'Payment deleted',
-    `Payment ${payment.id} for reservation ${payment.reservationId} was deleted.`, '/finance/payments')
+    `Reservation ${payment.reservationId} · ${payment.amount.toLocaleString('en-US')} VND · ${payment.method} · Date: ${payment.date} · Deleted by: ${activityActor(req)}`, '/finance/payments')
     .catch(error => console.error('Could not dispatch payment notification:', error));
   res.json({
     data: payment,

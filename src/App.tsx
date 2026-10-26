@@ -1007,6 +1007,7 @@ function Rooms({ property }: { property: string }) {
   const [savingNotes, setSavingNotes] = useState<Record<string, boolean>>({});
   const [pushState, setPushState] = useState('');
   const [pushBusy, setPushBusy] = useState(false);
+  const [pushEnabled, setPushEnabled] = useState(false);
 
   const load = () => Promise.all([
     api.rooms(query),
@@ -1025,6 +1026,37 @@ function Rooms({ property }: { property: string }) {
   }).catch(() => {});
 
   useEffect(() => { load(); }, [query, property]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function checkPushSubscription() {
+      if (
+        !('serviceWorker' in navigator) ||
+        !('PushManager' in window)
+      ) {
+        if (!cancelled) setPushEnabled(false);
+        return;
+      }
+
+      try {
+        const registration = await navigator.serviceWorker.ready;
+        const subscription = await registration.pushManager.getSubscription();
+
+        if (!cancelled) {
+          setPushEnabled(Boolean(subscription));
+        }
+      } catch {
+        if (!cancelled) setPushEnabled(false);
+      }
+    }
+
+    void checkPushSubscription();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function changeStatus(
     id: string,
@@ -1062,7 +1094,9 @@ function Rooms({ property }: { property: string }) {
       let subscription: PushSubscription | null = await registration.pushManager.getSubscription();
 
       if (!subscription) {
-        const keyResponse = await fetch(`${API_URL}/push/public-key`, { headers: { Authorization: `Bearer ${localStorage.getItem('hotel_auth_token') || ''}` } });
+        const keyResponse = await fetch(`${API_URL}/push/public-key`, {
+          headers: { Authorization: `Bearer ${localStorage.getItem('hotel_auth_token') || ''}` }
+        });
         const keyData = await keyResponse.json();
         if (!keyResponse.ok || !keyData.publicKey) {
           throw new Error(keyData.error || 'Could not get the push notification key.');
@@ -1088,9 +1122,45 @@ function Rooms({ property }: { property: string }) {
         throw new Error(saveData.error || 'Could not save this device subscription.');
       }
 
+      setPushEnabled(true);
       setPushState('Notifications enabled on this device.');
     } catch (e: any) {
       setPushState(e.message || 'Could not enable notifications.');
+    } finally {
+      setPushBusy(false);
+    }
+  }
+
+  async function disableNotifications() {
+    setPushBusy(true);
+    setPushState('');
+
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      const subscription = await registration.pushManager.getSubscription();
+
+      if (subscription) {
+        const response = await fetch(`${API_URL}/push/unsubscribe`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${localStorage.getItem('hotel_auth_token') || ''}`
+          },
+          body: JSON.stringify({ endpoint: subscription.endpoint })
+        });
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Could not disable notifications on the server.');
+        }
+
+        await subscription.unsubscribe();
+      }
+
+      setPushEnabled(false);
+      setPushState('Notifications disabled on this device.');
+    } catch (e: any) {
+      setPushState(e.message || 'Could not disable notifications.');
     } finally {
       setPushBusy(false);
     }
@@ -1118,7 +1188,7 @@ function Rooms({ property }: { property: string }) {
   }), [rows]);
 
   return <>
-    <PageHeader eyebrow="HOTEL OPERATIONS" title="Room management" description="View room availability, update operational status, and maintain room notes." actions={<><Button variant="secondary" onClick={load}><RefreshCw size={15}/> Refresh</Button><Button onClick={() => { if (!pushBusy) void enableNotifications(); }}><Bell size={15}/> {pushBusy ? "Enabling…" : "Enable Notifications"}</Button></>}/>
+    <PageHeader eyebrow="HOTEL OPERATIONS" title="Room management" description="View room availability, update operational status, and maintain room notes." actions={<><Button variant="secondary" onClick={load}><RefreshCw size={15}/> Refresh</Button><Button variant={pushEnabled ? "secondary" : "primary"} onClick={() => { if (!pushBusy) void (pushEnabled ? disableNotifications() : enableNotifications()); }}><Bell size={15}/> {pushBusy ? "Please wait…" : pushEnabled ? "Notifications Enabled" : "Enable Notifications"}</Button></>}/>
     <div className="mini-stat-grid room-status-summary">
       {([
         { title: 'Vacant', value: counts.vacant, field: 'occupancyStatus', status: 'Vacant' },
