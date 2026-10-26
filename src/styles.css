@@ -1872,3 +1872,72 @@
     font-size: 16px !important;
   }
 }
+
+/* Inactive reservation archive grouped by year */
+.reservation-year-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.reservation-year-group {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  background: #fff;
+}
+.reservation-year-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 0;
+  background: #f8faff;
+  color: #29364a;
+  text-align: left;
+  cursor: pointer;
+}
+.reservation-year-toggle:hover {
+  background: #f0f4ff;
+}
+.reservation-year-label {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.reservation-year-label strong {
+  font-size: 14px;
+  font-weight: 800;
+}
+.reservation-year-label span {
+  color: #8792a2;
+  font-size: 10.5px;
+}
+.reservation-year-chevron {
+  display: grid;
+  place-items: center;
+  width: 25px;
+  height: 25px;
+  border-radius: 6px;
+  background: #eaf0ff;
+  color: #416bd0;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+.reservation-year-content {
+  padding: 15px;
+  border-top: 1px solid var(--border);
+}
+.reservation-year-content .reservation-table {
+  overflow-x: auto;
+}
+@media (max-width: 560px) {
+  .reservation-year-toggle {
+    padding: 12px;
+  }
+  .reservation-year-content {
+    padding: 10px;
+  }
+}
