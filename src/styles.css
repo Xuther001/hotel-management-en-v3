@@ -2087,3 +2087,64 @@
     font-size: 15px;
   }
 }
+
+
+/* English / Vietnamese language selector */
+.language-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid var(--border, #dfe5ee);
+  border-radius: 9px;
+  background: #f5f7fb;
+  white-space: nowrap;
+}
+.language-toggle .language-option {
+  min-height: 28px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #526074;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.language-toggle .language-option.active {
+  background: #fff;
+  color: #315fce;
+  font-weight: 700;
+  box-shadow: 0 1px 3px #1720331a;
+}
+.language-toggle .language-option:focus-visible {
+  outline: 2px solid #315fce;
+  outline-offset: 2px;
+}
+.auth-screen { position: relative; }
+.auth-screen > .language-toggle {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+}
+
+/* Language selection in Settings */
+.settings-language {
+  margin: 18px 0 24px;
+  padding: 18px;
+  border: 1px solid var(--border, #dfe5ee);
+  border-radius: 12px;
+  background: var(--surface, #fff);
+}
+.settings-language h3 {
+  margin: 0 0 6px;
+  font-size: 15px;
+}
+.settings-language p {
+  margin: 0 0 14px;
+  color: var(--muted, #68758a);
+  font-size: 13px;
+}
+.settings-language .language-toggle {
+  width: fit-content;
+}

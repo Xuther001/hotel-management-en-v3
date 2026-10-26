@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, AreaChart, Area } from 'recharts';
 import { api, money, API_URL, clearAuthToken } from './api';
+import { LanguageToggle } from './i18n';
 
 async function downloadBackup(
   url: string,
@@ -128,7 +129,7 @@ function LoginScreen({ onLogin }: { onLogin: (user: AuthUser) => void }) {
     }
   }
 
-  return <div className="auth-screen">
+  return <div className="auth-screen"><LanguageToggle />
     <form className="auth-card" onSubmit={submit}>
       <div className="auth-brand"><div className="brand-mark"><Building2 size={22}/></div>
         <div><strong>Haven Group</strong><span>HOTEL MANAGEMENT</span></div>
@@ -1692,7 +1693,7 @@ function SettingsPage() {
 
   if (selectedSection === "users") return <UserManagement onBack={() => setSelectedSection("")}/>;
 
-  return <><PageHeader eyebrow="ADMINISTRATION" title="Settings" description="Configure how your business management system is organized."/><div className="backup-panel">
+  return <><PageHeader eyebrow="ADMINISTRATION" title="Settings" description="Configure how your business management system is organized."/><div className="settings-language"><h3>Language</h3><p>Choose the language used throughout the app.</p><LanguageToggle /></div><div className="backup-panel">
       <div className="backup-copy">
         <div className="settings-icon"><FileText size={22} /></div>
         <div>
