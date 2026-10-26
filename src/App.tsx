@@ -298,7 +298,7 @@ function Dashboard({ property }: { property: string }) {
   if (error) return <ErrorState error={error} retry={() => setRefresh(x => x + 1)}/>;
   if (!data) return <div className="loading"><RefreshCw className="spin"/> Loading dashboard…</div>;
   return <>
-    <PageHeader eyebrow={new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Ho_Chi_Minh", weekday: "long", month: "long", day: "numeric", year: "numeric" }).format(new Date()).toUpperCase()} title={`${Number(new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", hour12: false }).format(new Date())) < 12 ? "Good morning" : Number(new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", hour12: false }).format(new Date())) < 18 ? "Good afternoon" : "Good evening"}, Owner`} description="A live overview based on your saved hotel records." actions={<><Button variant="secondary" onClick={() => setRefresh(x => x + 1)}><RefreshCw size={15}/> Refresh</Button><Button onClick={() => window.location.href='/reservations'}><Plus size={16}/> New reservation</Button></>}/>
+    <PageHeader eyebrow={new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Ho_Chi_Minh", weekday: "long", month: "long", day: "numeric", year: "numeric" }).format(new Date()).toUpperCase()} title="Dashboard" description="A live overview based on your saved hotel records." actions={<Button variant="secondary" onClick={() => setRefresh(x => x + 1)}><RefreshCw size={15}/> Refresh</Button>}/>
 
     <div className="stat-grid">
       <StatCard title="Completed stay revenue" value={money(data.revenue)} icon={<CircleDollarSign size={19}/>} note="completed checkouts this month"/>
