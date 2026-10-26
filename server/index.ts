@@ -1381,7 +1381,17 @@ app.post('/api/v1/finance/expenses', (req, res) => {
 });
 
 function getBillingRows(d: AnyRecord) {
-  const today = new Date().toISOString().slice(0, 10);
+  // Use the hotel's local date and clock, regardless of the API computer's timezone.
+  const now = new Date();
+  const vietnamDateParts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(now);
+  const vietnamPart = (type: string) =>
+    vietnamDateParts.find(part => part.type === type)?.value || '';
+  const today = `${vietnamPart('year')}-${vietnamPart('month')}-${vietnamPart('day')}`;
   const settings = Array.isArray(d.billingSettings) ? d.billingSettings : [];
   const payments = Array.isArray(d.payments) ? d.payments : [];
 
@@ -1458,16 +1468,11 @@ function getBillingRows(d: AnyRecord) {
           const amount = Math.round(rawAmount / 1000) * 1000;
 
           const periodDate = new Date(periodStart).toISOString().slice(0, 10);
-          const month = periodDate.slice(0, 7);
-          const fifth = `${month}-05`;
 
-          // Preserve the existing due-date rule:
-          // the first installment is due at check-in if the 5th has passed;
-          // subsequent installments remain due on the 5th of their month.
-          const dueDate =
-            periodStart === start && fifth < String(r.checkIn)
-              ? String(r.checkIn)
-              : fifth;
+          // Every monthly installment is due on its check-in anniversary.
+          // The anniversary calculation above preserves the original day when
+          // possible and clamps to month-end for shorter months.
+          const dueDate = periodDate;
 
           installments.push({
             dueDate,
@@ -1494,6 +1499,31 @@ function getBillingRows(d: AnyRecord) {
         0
       );
 
+      // Monthly grace period: due date counts as day 1, so the deadline is
+      // noon on due date + 4 calendar days in Ho Chi Minh City (UTC+07:00).
+      // At exactly noon the installment is not overdue; it becomes overdue
+      // only after the deadline. Daily billing retains its existing rule.
+      const isInstallmentOverdue = (installment: AnyRecord) => {
+        if (Number(installment.balance || 0) <= 0) return false;
+
+        const installmentDueDate = String(installment.dueDate || '');
+        if (rentalType !== 'Monthly') {
+          return installmentDueDate < today;
+        }
+
+        const [year, month, day] = installmentDueDate.split('-').map(Number);
+        if (!year || !month || !day) return false;
+
+        const graceEndDate = new Date(Date.UTC(year, month - 1, day + 4));
+        const deadline =
+          `${graceEndDate.getUTCFullYear()}-` +
+          `${String(graceEndDate.getUTCMonth() + 1).padStart(2, '0')}-` +
+          `${String(graceEndDate.getUTCDate()).padStart(2, '0')}` +
+          'T12:00:00+07:00';
+
+        return now.getTime() > new Date(deadline).getTime();
+      };
+
       // Apply each recorded payment to the oldest outstanding installment first.
       for (const payment of reservationPayments) {
         let remaining = Math.max(0, Number(payment.amount || 0));
@@ -1512,15 +1542,15 @@ function getBillingRows(d: AnyRecord) {
         (sum, x) => sum + (x.dueDate <= today ? x.balance : 0), 0
       );
       const overdueAmount = installments.reduce(
-        (sum, x) => sum + (x.dueDate < today ? x.balance : 0), 0
+        (sum, x) => sum + (isInstallmentOverdue(x) ? x.balance : 0), 0
       );
 
       for (const installment of installments) {
         installment.status = installment.balance <= 0
           ? 'Paid'
-          : installment.dueDate < today
+          : isInstallmentOverdue(installment)
             ? 'Overdue'
-            : installment.dueDate === today
+            : installment.dueDate <= today
               ? 'Due'
               : 'Upcoming';
       }
