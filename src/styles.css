@@ -2054,3 +2054,19 @@
     padding-right: 5px;
   }
 }
+
+
+/* Emphasize room numbers in the guest billing register on desktop and mobile */
+.billing-register-table .billing-room-number {
+  font-size: 16px;
+  font-weight: 800;
+  color: #243650;
+  letter-spacing: -0.3px;
+}
+
+@media (max-width: 560px) {
+  .billing-register-table .billing-room-number {
+    font-size: 18px;
+    font-weight: 800;
+  }
+}
