@@ -1489,8 +1489,7 @@ function Finance({section = 'billing'}: {section?: 'billing'|'installments'|'pay
           <div><span>Guest charges</span><strong>{money(charges)}</strong></div>
           <div><span>Payments recorded</span><strong>{money(paid)}</strong></div>
           <div><span>Outstanding balance</span><strong>{money(balance)}</strong></div>
-          <div><span>Due now</span><strong>{money(dueNow)}</strong></div>
-          <div><span>Overdue amount</span><strong>{money(overdueAmount)}</strong></div>
+                <div><span>Overdue amount</span><strong>{money(overdueAmount)}</strong></div>
           <div><span>Overdue accounts</span><strong>{historicalBills.filter(r=>r.overdueAmount>0).length}</strong></div>
         </div>
       ) : (
