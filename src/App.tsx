@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, AreaChart, Area } from 'recharts';
 import { api, money, API_URL, clearAuthToken } from './api';
-import { LanguageToggle, initializeAccountLanguage, clearAccountLanguage } from './i18n';
+import { LanguageToggle, initializeAccountLanguage, clearAccountLanguage, useLanguage } from './i18n';
 
 async function downloadBackup(
   url: string,
@@ -238,6 +238,9 @@ function AuthenticatedApp({ user, onLogout }: { user: AuthUser; onLogout: () => 
   const pageTitle = titleMap[location.pathname] || 'Business management';
   useEffect(() => { api.properties().then(r => setProperties(r.data)).catch(() => {}); }, []);
   return <div className="app-shell">
+    <div aria-hidden="true" style={{ display: 'none' }}>
+      <LanguageToggle />
+    </div>
     <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
       <div className="brand"><div className="brand-mark"><Building2 size={20}/></div><div><strong>Haven Group</strong><span>BUSINESS MANAGEMENT</span></div><button className="icon-button mobile-close" onClick={() => setSidebarOpen(false)}><X size={18}/></button></div>
       <div className="workspace-select"><div className="workspace-icon"><Building2 size={17}/></div><div><span>WORKSPACE</span><strong>Hospitality Group</strong></div><ChevronDown size={15}/></div>
@@ -500,6 +503,8 @@ function ReservationTable({ rows, compact = false, onStatusChange, onDelete, onE
 }
 
 function ReservationCalendar({ property }: { property: string }) {
+  const language = useLanguage();
+  const isVietnamese = language === 'vi';
   const [rows, setRows] = useState<AnyRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -567,31 +572,34 @@ function ReservationCalendar({ property }: { property: string }) {
     );
   };
 
-  const monthLabel = month.toLocaleDateString('en-GB', {
+  const monthLabel = month.toLocaleDateString(isVietnamese ? 'vi-VN' : 'en-GB', {
     month: 'long',
     year: 'numeric'
   });
+  const weekdayLabels = isVietnamese
+    ? ['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'Chủ nhật']
+    : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
   return <>
     <PageHeader
       eyebrow="FRONT DESK"
       title="Reservation Calendar"
-      description="See guest arrivals and departures by date and room across your selected hotels."
+      description={isVietnamese ? "Theo dõi khách nhận phòng và trả phòng theo ngày, phòng và khách sạn đã chọn." : "See guest arrivals and departures by date and room across your selected hotels."}
       actions={
         <Button variant="secondary" onClick={() => setMonth(new Date(new Date().getFullYear(), new Date().getMonth(), 1))}>
-          <CalendarDays size={15}/> Today
+          <CalendarDays size={15}/> {isVietnamese ? "Hôm nay" : "Today"}
         </Button>
       }
     />
 
-    <Panel title={monthLabel} subtitle="Each entry shows the room number and guest name."
+    <Panel title={monthLabel} subtitle={isVietnamese ? "Mỗi mục hiển thị số phòng và tên khách." : "Each entry shows the room number and guest name."}
       action={
         <div style={{ display: 'flex', gap: 8 }}>
           <Button variant="secondary" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}>
-            ← Previous
+            {isVietnamese ? "← Tháng trước" : "← Previous"}
           </Button>
           <Button variant="secondary" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}>
-            Next →
+            {isVietnamese ? "Tháng sau →" : "Next →"}
           </Button>
         </div>
       }
@@ -599,20 +607,20 @@ function ReservationCalendar({ property }: { property: string }) {
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, marginBottom: 16, fontSize: 13 }}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
           <span style={{ width: 10, height: 10, borderRadius: 3, background: '#2563eb' }}/>
-          Check-in
+          {isVietnamese ? 'Nhận phòng' : 'Check-in'}
         </span>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
           <span style={{ width: 10, height: 10, borderRadius: 3, background: '#ea580c' }}/>
-          Check-out
+          {isVietnamese ? 'Trả phòng' : 'Check-out'}
         </span>
-        <span style={{ color: 'var(--muted, #64748b)' }}>Use the hotel selector at the top to filter the calendar.</span>
+        <span style={{ color: 'var(--muted, #64748b)' }}>{isVietnamese ? "Sử dụng bộ chọn khách sạn ở phía trên để lọc lịch." : "Use the hotel selector at the top to filter the calendar."}</span>
       </div>
 
       {error && <div className="notice error">{error}</div>}
-      {loading ? <div className="loading"><RefreshCw className="spin"/> Loading reservations…</div> : (
+      {loading ? <div className="loading"><RefreshCw className="spin"/> {isVietnamese ? "Đang tải đặt phòng…" : "Loading reservations…"}</div> : (
         <>
           <div className="reservation-calendar-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: 1, background: 'var(--border, #e2e8f0)', border: '1px solid var(--border, #e2e8f0)' }}>
-            {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => (
+            {weekdayLabels.map(day => (
               <div key={day} style={{ background: 'var(--panel, #f8fafc)', padding: '10px 4px', textAlign: 'center', fontSize: 12, fontWeight: 700 }}>
                 {day}
               </div>
@@ -642,9 +650,9 @@ function ReservationCalendar({ property }: { property: string }) {
                     marginBottom: 5,
                     color: isToday ? '#6b21a8' : 'inherit'
                   }}>
-                    {day.getDate()}{isToday ? ' · Today' : ''}
+                    {day.getDate()}{isToday ? (isVietnamese ? ' · Hôm nay' : ' · Today') : ''}
                   </div>
-                  <div className="calendar-day-counts" aria-label={`Events on ${key}`}>
+                  <div className="calendar-day-counts" aria-label={isVietnamese ? `Sự kiện ngày ${key}` : `Events on ${key}`}>
                     {(['in', 'out'] as const).map(type => {
                       const count = events.filter(event => event.type === type).length;
                       if (!count) return null;
@@ -653,8 +661,8 @@ function ReservationCalendar({ property }: { property: string }) {
                           key={type}
                           type="button"
                           className={`calendar-day-count ${type === 'in' ? 'check-in' : 'check-out'}`}
-                          aria-label={`${count} check-${type === 'in' ? 'ins' : 'outs'} on ${key}`}
-                          title={`${count} check-${type === 'in' ? 'ins' : 'outs'}`}
+                          aria-label={isVietnamese ? `${count} lượt ${type === 'in' ? 'nhận phòng' : 'trả phòng'} ngày ${key}` : `${count} check-${type === 'in' ? 'ins' : 'outs'} on ${key}`}
+                          title={isVietnamese ? `${count} lượt ${type === 'in' ? 'nhận phòng' : 'trả phòng'}` : `${count} check-${type === 'in' ? 'ins' : 'outs'}`}
                           onClick={() => setSelectedEventList({
                             date: key,
                             type,
@@ -685,14 +693,14 @@ function ReservationCalendar({ property }: { property: string }) {
                         >
                           <span aria-hidden="true">{type === 'in' ? '↓' : '↑'}</span>
                           <strong>{count}</strong>
-                          <span>{type === 'in' ? 'In' : 'Out'}</span>
+                          <span>{isVietnamese ? (type === 'in' ? 'Nhận phòng' : 'Trả phòng') : (type === 'in' ? 'In' : 'Out')}</span>
                         </button>
                       );
                     })}
                   </div>
                   <div className="calendar-day-events" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                     {events.slice(0, 4).map((event, index) => (
-                      <div className="calendar-day-event" key={`${event.row.id}-${event.type}-${index}`} title={`${event.type === 'in' ? 'Check-in' : 'Check-out'} · Room ${event.row.room} · ${event.row.guest}`} style={{
+                      <div className="calendar-day-event" key={`${event.row.id}-${event.type}-${index}`} title={isVietnamese ? `${event.type === 'in' ? 'Nhận phòng' : 'Trả phòng'} · Phòng ${event.row.room} · ${event.row.guest}` : `${event.type === 'in' ? 'Check-in' : 'Check-out'} · Room ${event.row.room} · ${event.row.guest}`} style={{
                         background: event.type === 'in' ? '#dbeafe' : '#ffedd5',
                         color: event.type === 'in' ? '#1d4ed8' : '#9a3412',
                         borderLeft: `3px solid ${event.type === 'in' ? '#2563eb' : '#ea580c'}`,
@@ -702,7 +710,7 @@ function ReservationCalendar({ property }: { property: string }) {
                         lineHeight: 1.35,
                         overflowWrap: 'anywhere'
                       }}>
-                        <strong>{event.type === 'in' ? 'IN' : 'OUT'} · {event.row.room}</strong>
+                        <strong>{isVietnamese ? (event.type === 'in' ? 'NHẬN' : 'TRẢ') : (event.type === 'in' ? 'IN' : 'OUT')} · {event.row.room}</strong>
                         <div>{event.row.guest}</div>
                       </div>
                     ))}
@@ -715,9 +723,9 @@ function ReservationCalendar({ property }: { property: string }) {
                           type: 'all',
                           rows: events
                         })}
-                        aria-label={`Show all ${events.length} arrivals and departures on ${key}`}
+                        aria-label={isVietnamese ? `Xem tất cả ${events.length} lượt nhận và trả phòng ngày ${key}` : `Show all ${events.length} arrivals and departures on ${key}`}
                       >
-                        {events.length > 4 ? `+${events.length - 4} more` : 'View Details'}
+                        {events.length > 4 ? `+${events.length - 4} ${isVietnamese ? 'mục khác' : 'more'}` : (isVietnamese ? 'Xem chi tiết' : 'View Details')}
                       </button>
                     )}
                   </div>
@@ -727,12 +735,12 @@ function ReservationCalendar({ property }: { property: string }) {
           </div>
           {selectedEventList && (
             <Modal
-              title={`${selectedEventList.type === 'all' ? 'Arrivals & departures' : selectedEventList.type === 'in' ? 'Check-ins' : 'Check-outs'} · ${selectedEventList.rows.length}`}
+              title={`${selectedEventList.type === 'all' ? (isVietnamese ? 'Nhận và trả phòng' : 'Arrivals & departures') : selectedEventList.type === 'in' ? (isVietnamese ? 'Lượt nhận phòng' : 'Check-ins') : (isVietnamese ? 'Lượt trả phòng' : 'Check-outs')} · ${selectedEventList.rows.length}`}
               onClose={() => setSelectedEventList(null)}
             >
               <div className="calendar-popup">
                 <p className="calendar-popup-date">
-                  {new Date(`${selectedEventList.date}T00:00:00`).toLocaleDateString('en-GB', {
+                  {new Date(`${selectedEventList.date}T00:00:00`).toLocaleDateString(isVietnamese ? 'vi-VN' : 'en-GB', {
                     weekday: 'long',
                     day: 'numeric',
                     month: 'long',
@@ -742,10 +750,10 @@ function ReservationCalendar({ property }: { property: string }) {
                 {selectedEventList.rows.map(({ row, type }, index) => (
                   <div className="calendar-popup-row" key={`${row.id}-${type}-${index}`}>
                     <div className="calendar-popup-guest">
-                      <strong>{row.guest || 'Guest name unavailable'}</strong>
-                      <span>Room {row.room || '—'} · {row.propertyId === 'hotel-a' ? 'Hotel A' : row.propertyId === 'hotel-b' ? 'Hotel B' : (row.property || 'Unknown hotel')}</span>
+                      <strong>{row.guest || (isVietnamese ? 'Không có tên khách' : 'Guest name unavailable')}</strong>
+                      <span>{isVietnamese ? 'Phòng' : 'Room'} {row.room || '—'} · {row.propertyId === 'hotel-a' ? 'Hotel A' : row.propertyId === 'hotel-b' ? 'Hotel B' : (row.property || (isVietnamese ? 'Khách sạn không xác định' : 'Unknown hotel'))}</span>
                       <span className={`calendar-popup-event-type ${type === 'in' ? 'check-in' : 'check-out'}`}>
-                        {type === 'in' ? '↓ Check-in' : '↑ Check-out'}
+                        {isVietnamese ? (type === 'in' ? '↓ Nhận phòng' : '↑ Trả phòng') : (type === 'in' ? '↓ Check-in' : '↑ Check-out')}
                       </span>
                       <span className="calendar-popup-booking">{row.id}</span>
                     </div>
@@ -758,7 +766,7 @@ function ReservationCalendar({ property }: { property: string }) {
             </Modal>
           )}
           <div style={{ marginTop: 12, fontSize: 12, color: 'var(--muted, #64748b)' }}>
-            {activeRows.length} active reservations · {calendarRows.filter(r => r.checkIn === today).length} check-ins today · {calendarRows.filter(r => r.checkOut === today).length} check-outs today
+            {isVietnamese ? `${activeRows.length} đặt phòng đang hoạt động · ${calendarRows.filter(r => r.checkIn === today).length} lượt nhận phòng hôm nay · ${calendarRows.filter(r => r.checkOut === today).length} lượt trả phòng hôm nay` : `${activeRows.length} active reservations · ${calendarRows.filter(r => r.checkIn === today).length} check-ins today · ${calendarRows.filter(r => r.checkOut === today).length} check-outs today`}
           </div>
         </>
       )}

@@ -118,7 +118,34 @@ const translations: Record<string, string> = {
   "Search room number or type…": "Tìm số phòng hoặc loại phòng…",
   "No rooms currently have this status.": "Hiện không có phòng nào ở trạng thái này.",
   "Room": "Phòng",
-  "Internal management system · Local API data": "Hệ thống quản lý nội bộ · Dữ liệu API cục bộ"
+  "Internal management system · Local API data": "Hệ thống quản lý nội bộ · Dữ liệu API cục bộ",
+  "See guest arrivals and departures by date and room across your selected hotels.": "Theo dõi khách nhận phòng và trả phòng theo ngày, phòng và khách sạn đã chọn.",
+  "Each entry shows the room number and guest name.": "Mỗi mục hiển thị số phòng và tên khách.",
+  "Today": "Hôm nay",
+  "Previous": "Trước",
+  "Next": "Tiếp",
+  "Check-ins": "Lượt nhận phòng",
+  "Check-outs": "Lượt trả phòng",
+  "Arrivals & departures": "Khách nhận phòng và trả phòng",
+  "View Details": "Xem chi tiết",
+  "Use the hotel selector at the top to filter the calendar.": "Sử dụng bộ chọn khách sạn ở phía trên để lọc lịch.",
+  "Loading reservations…": "Đang tải đặt phòng…",
+  "Guest name unavailable": "Không có tên khách",
+  "Unknown hotel": "Khách sạn không xác định",
+  "In": "Nhận phòng",
+  "Out": "Trả phòng",
+  "FRONT DESK": "LỄ TÂN",
+  "Mon": "Thứ 2",
+  "Tue": "Thứ 3",
+  "Wed": "Thứ 4",
+  "Thu": "Thứ 5",
+  "Fri": "Thứ 6",
+  "Sat": "Thứ 7",
+  "Sun": "Chủ nhật",
+  "active reservations": "đặt phòng đang hoạt động",
+  "check-ins today": "lượt nhận phòng hôm nay",
+  "check-outs today": "lượt trả phòng hôm nay",
+
 };
 
 type Tracked = { original: string; last: string };
@@ -148,23 +175,34 @@ export function setLanguagePreference(language: Language) {
 }
 
 export async function initializeAccountLanguage(savedLanguage?: string) {
-  const language: Language =
+  let localLanguage: Language | null = null;
+
+  try {
+    const stored = localStorage.getItem('hotel_language');
+    if (stored === 'en' || stored === 'vi') {
+      localLanguage = stored;
+    }
+  } catch {}
+
+  const accountLanguage: Language | null =
     savedLanguage === 'en' || savedLanguage === 'vi'
       ? savedLanguage
-      : readLocalLanguage();
+      : null;
+
+  // Preserve the browser's explicit choice across refreshes.
+  const language: Language = localLanguage ?? accountLanguage ?? 'en';
 
   setLanguagePreference(language);
 
-  // Persist the browser's current choice for older accounts that have no preference yet.
-  if (savedLanguage !== 'en' && savedLanguage !== 'vi') {
+  // Keep the account preference synchronized with the chosen language.
+  if (accountLanguage !== language) {
     try {
       await api.updateLanguage(language);
     } catch (error) {
-      console.error('Could not save initial account language preference:', error);
+      console.error('Could not synchronize account language preference:', error);
     }
   }
 }
-
 export function clearAccountLanguage() {
   accountLanguage = null;
 }
@@ -179,6 +217,18 @@ function translated(original: string, language: Language): string {
     result = Object.entries(translations).find(([, vi]) => vi === value)?.[0] || value;
   }
   return original.replace(value, result);
+}
+
+export function useLanguage(): Language {
+  const [language, setLanguage] = useState<Language>(() => accountLanguage || readLocalLanguage());
+
+  useEffect(() => {
+    const listener = (next: Language) => setLanguage(next);
+    languageListeners.add(listener);
+    return () => { languageListeners.delete(listener); };
+  }, []);
+
+  return language;
 }
 
 export function LanguageToggle() {
