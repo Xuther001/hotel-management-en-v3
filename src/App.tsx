@@ -277,6 +277,8 @@ function StatCard({ title, value, change, icon, positive = true, note }: { title
   return <div className="stat-card"><div className="stat-top"><span>{title}</span><div className="stat-icon">{icon}</div></div><strong className="stat-value">{value}</strong><div className="stat-bottom">{change && <span className={positive ? 'trend up' : 'trend down'}>{positive ? <ArrowUpRight size={14}/> : <ArrowDownRight size={14}/>} {change}</span>}<span>{note || 'vs. previous period'}</span></div></div>;
 }
 function Dashboard({ property }: { property: string }) {
+  const language = useLanguage();
+  const isVietnamese = language === 'vi';
   const [data, setData] = useState<AnyRow | null>(null);
   const [activityMonth, setActivityMonth] = useState(() => {
     const now = new Date();
@@ -310,7 +312,7 @@ function Dashboard({ property }: { property: string }) {
   if (error) return <ErrorState error={error} retry={() => setRefresh(x => x + 1)}/>;
   if (!data) return <div className="loading"><RefreshCw className="spin"/> Loading dashboard…</div>;
   return <>
-    <PageHeader eyebrow={new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Ho_Chi_Minh", weekday: "long", month: "long", day: "numeric", year: "numeric" }).format(new Date()).toUpperCase()} title="Dashboard" description="A live overview based on your saved hotel records." actions={<Button variant="secondary" onClick={() => setRefresh(x => x + 1)}><RefreshCw size={15}/> Refresh</Button>}/>
+    <PageHeader eyebrow={new Intl.DateTimeFormat(isVietnamese ? 'vi-VN' : 'en-US', { timeZone: 'Asia/Ho_Chi_Minh', weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }).format(new Date()).toUpperCase()} title="Dashboard" description="A live overview based on your saved hotel records." actions={<Button variant="secondary" onClick={() => setRefresh(x => x + 1)}><RefreshCw size={15}/> Refresh</Button>}/>
 
     <div className="stat-grid">
       <StatCard title="Completed stay revenue" value={money(data.revenue)} icon={<CircleDollarSign size={19}/>} note="completed checkouts this month"/>
@@ -320,11 +322,23 @@ function Dashboard({ property }: { property: string }) {
     </div>
     <div className="content-grid two-one">
       <Panel title="Revenue performance" subtitle="Completed stay amounts by checkout month · VND millions" action={<button className="text-button" onClick={() => window.location.href='/reports'}>View report <ArrowUpRight size={14}/></button>}>
-        <div className="chart-wrap"><ResponsiveContainer width="100%" height="100%"><AreaChart data={data.revenueTrend} margin={{top:12,right:10,left:0,bottom:0}}><defs><linearGradient id="blueArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#4779ed" stopOpacity={0.18}/><stop offset="95%" stopColor="#4779ed" stopOpacity={0}/></linearGradient></defs><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#edf0f5"/><XAxis dataKey="month" tickLine={false} axisLine={false} tick={{fontSize:11,fill:'#8a94a6'}}/><YAxis tickLine={false} axisLine={false} tick={{fontSize:11,fill:'#8a94a6'}} width={36}/><Tooltip formatter={(v:any) => [`₫${v}M`, 'Revenue']}/><Area type="monotone" dataKey="hotelA" name="Hotel A" stroke="#4779ed" fill="url(#blueArea)" strokeWidth={2.5}/><Area type="monotone" dataKey="hotelB" name="Hotel B" stroke="#25b99a" fill="transparent" strokeWidth={2.5}/></AreaChart></ResponsiveContainer></div>
+        <div className="chart-wrap"><ResponsiveContainer width="100%" height="100%"><AreaChart data={data.revenueTrend.map((item: AnyRow) => {
+          if (!isVietnamese) return item;
+          const months: Record<string, string> = {
+            Jan: 'Th1', Feb: 'Th2', Mar: 'Th3', Apr: 'Th4',
+            May: 'Th5', Jun: 'Th6', Jul: 'Th7', Aug: 'Th8',
+            Sep: 'Th9', Oct: 'Th10', Nov: 'Th11', Dec: 'Th12',
+            January: 'Tháng 1', February: 'Tháng 2', March: 'Tháng 3',
+            April: 'Tháng 4', June: 'Tháng 6', July: 'Tháng 7',
+            August: 'Tháng 8', September: 'Tháng 9', October: 'Tháng 10',
+            November: 'Tháng 11', December: 'Tháng 12'
+          };
+          return { ...item, month: months[item.month] || item.month };
+        })} margin={{top:12,right:10,left:0,bottom:0}}><defs><linearGradient id="blueArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#4779ed" stopOpacity={0.18}/><stop offset="95%" stopColor="#4779ed" stopOpacity={0}/></linearGradient></defs><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#edf0f5"/><XAxis dataKey="month" tickLine={false} axisLine={false} tick={{fontSize:11,fill:'#8a94a6'}}/><YAxis tickLine={false} axisLine={false} tick={{fontSize:11,fill:'#8a94a6'}} width={36}/><Tooltip formatter={(v:any) => [`₫${v}M`, 'Revenue']}/><Area type="monotone" dataKey="hotelA" name="Hotel A" stroke="#4779ed" fill="url(#blueArea)" strokeWidth={2.5}/><Area type="monotone" dataKey="hotelB" name="Hotel B" stroke="#25b99a" fill="transparent" strokeWidth={2.5}/></AreaChart></ResponsiveContainer></div>
         <div className="legend"><span><i className="blue-dot"/> Hotel A</span><span><i className="green-dot"/> Hotel B</span></div>
       </Panel>
       <Panel title="Hotel performance" subtitle="Current occupancy" action={<button className="icon-button" title="Details" onClick={() => window.location.href='/rooms'}><ArrowUpRight size={17}/></button>}>
-        <div className="property-list">{data.properties.map((p: AnyRow) => <div className="property-row" key={p.id}><div className="property-symbol"><Building2 size={18}/></div><div className="property-info"><strong>{p.name}</strong><span>{p.rooms} rooms · {p.city}</span><div className="progress"><i style={{width:`${p.occupancy}%`}}/></div></div><div className="property-number"><strong>{p.occupancy}%</strong><span>occupied</span></div></div>)}</div>
+        <div className="property-list">{data.properties.map((p: AnyRow) => <div className="property-row" key={p.id}><div className="property-symbol"><Building2 size={18}/></div><div className="property-info"><strong>{p.name}</strong><span>{p.rooms} {isVietnamese ? 'phòng' : 'rooms'} · {p.city}</span><div className="progress"><i style={{width:`${p.occupancy}%`}}/></div></div><div className="property-number"><strong>{p.occupancy}%</strong><span>{isVietnamese ? 'đang có khách' : 'occupied'}</span></div></div>)}</div>
         <div className="property-footer"><span>Combined monthly revenue</span><strong>{money(data.revenue)}</strong></div>
       </Panel>
     </div>
@@ -353,13 +367,13 @@ function Dashboard({ property }: { property: string }) {
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#edf0f5"/>
                   <XAxis dataKey="room" interval={0} angle={-45} textAnchor="end" height={68} tickLine={false} axisLine={false} tick={{fontSize:10,fill:'#7e899b'}}/>
                   <YAxis allowDecimals={false} tickLine={false} axisLine={false} width={38} tick={{fontSize:10,fill:'#7e899b'}}/>
-                  <Tooltip formatter={(value: any) => [`${value} ${Number(value) === 1 ? 'night' : 'nights'}`, 'Occupied']} labelFormatter={(label: any) => `Room ${label}`}/>
+                  <Tooltip formatter={(value: any) => [`${value} ${isVietnamese ? 'đêm' : (Number(value) === 1 ? 'night' : 'nights')}`, isVietnamese ? 'Đang có khách' : 'Occupied']} labelFormatter={(label: any) => `${isVietnamese ? 'Phòng' : 'Room'} ${label}`}/>
                   <Bar dataKey="occupiedDays" name="Occupied nights" fill="#4779ed" radius={[4,4,0,0]} maxBarSize={25}/>
                 </BarChart>
               </ResponsiveContainer>
             </div>
           </div>
-          <div className="popularity-footnote">Reporting window: {popularity.startDate} to {popularity.endDate}. Confirmed, cancelled, no-show, and future stays are excluded.</div>
+          <div className="popularity-footnote">{isVietnamese ? 'Khoảng thời gian báo cáo:' : 'Reporting window:'} {popularity.startDate} {isVietnamese ? 'đến' : 'to'} {popularity.endDate}. {isVietnamese ? 'Các kỳ lưu trú đã xác nhận nhưng chưa hoàn tất, đã hủy, khách không đến và kỳ lưu trú trong tương lai không được tính.' : 'Confirmed, cancelled, no-show, and future stays are excluded.'}</div>
         </>}
     </Panel>
     <div className="content-grid two-one lower-grid">
