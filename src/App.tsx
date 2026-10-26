@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode, useRef } from 'react';
 import { Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, BedDouble, CalendarDays, Users, Wallet, Package, Wrench,
@@ -193,6 +193,15 @@ function AuthenticatedApp({ user, onLogout }: { user: AuthUser; onLogout: () => 
   const [search, setSearch] = useState('');
   const [reservationCount, setReservationCount] = useState<number | null>(null);
 
+  const refreshReservationCount = useCallback(async () => {
+    try {
+      const r = await api.reservations('', property);
+      setReservationCount((r.data || []).length);
+    } catch {
+      setReservationCount(null);
+    }
+  }, [property]);
+
   useEffect(() => {
     let active = true;
     api.reservations('', property)
@@ -219,7 +228,7 @@ function AuthenticatedApp({ user, onLogout }: { user: AuthUser; onLogout: () => 
       <header className="topbar"><div className="top-left"><button className="icon-button mobile-menu" onClick={() => setSidebarOpen(true)}><Menu size={20}/></button><div className="breadcrumbs">Workspace <span>/</span> <strong>{pageTitle}</strong></div></div><div className="top-actions"><label className="property-filter"><Building2 size={16}/><select value={property} onChange={e => setProperty(e.target.value)}><option value="all">All hotels</option>{properties.map(p => <option value={p.id} key={p.id}>{p.name}</option>)}</select><ChevronDown size={14}/></label><button className="icon-button top-search" onClick={() => document.getElementById('global-search')?.focus()} title="Search"><Search size={18}/></button><button className="icon-button notification" title="Notifications" onClick={() => alert('Demo notifications: 3 maintenance tasks and 2 contract renewals require attention.')}><Bell size={18}/><i/></button><div className="top-divider"/><div className="top-user"><div className="avatar">{user.name.slice(0, 2).toUpperCase()}</div><div><strong>{user.name}</strong><span>{user.role}</span></div><ChevronDown size={14}/></div></div></header>
       <div className="page-wrap"><Routes>
         <Route path="/" element={<Dashboard property={property}/>} />
-        <Route path="/reservations" element={<Reservations property={property} />} />
+        <Route path="/reservations" element={<Reservations property={property} onReservationCountChange={refreshReservationCount} />} />
         <Route path="/reservation-calendar" element={<ReservationCalendar property={property} />} />
         <Route path="/rooms" element={<Rooms property={property}/>} />
         <Route path="/employees" element={<Employees />} />
@@ -672,7 +681,7 @@ function ReservationCalendar({ property }: { property: string }) {
   </>;
 }
 
-function Reservations({ property }: { property: string }) {
+function Reservations({ property, onReservationCountChange }: { property: string; onReservationCountChange: () => Promise<void> }) {
   const [rows, setRows] = useState<AnyRow[]>([]);
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
@@ -768,7 +777,7 @@ function Reservations({ property }: { property: string }) {
     try {
       setError('');
       await api.deleteReservation(id);
-      load();
+      await Promise.all([load(), onReservationCountChange()]);
     } catch (e: any) {
       setError(e.message || 'Could not delete reservation.');
     }
@@ -850,7 +859,7 @@ function Reservations({ property }: { property: string }) {
       }
       setOpen(false);
       setEditingReservation(null);
-      await load();
+      await Promise.all([load(), onReservationCountChange()]);
 
       const restorePosition = () => {
         const { x, y } = reservationScrollPosition.current;
