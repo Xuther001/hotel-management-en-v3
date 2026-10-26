@@ -483,13 +483,19 @@ function ReservationCalendar({ property }: { property: string }) {
     new Date(gridStart.getFullYear(), gridStart.getMonth(), gridStart.getDate() + i)
   );
 
-  const activeRows = rows.filter(r =>
+  const calendarRows = rows.filter(r =>
     !['cancelled', 'no-show', 'noshow'].includes(String(r.status || '').toLowerCase())
+  );
+
+  const activeRows = calendarRows.filter(r =>
+    ['confirmed', 'arriving today', 'checked in'].includes(
+      String(r.status || 'Confirmed').toLowerCase()
+    )
   );
 
   const eventsFor = (date: string) => {
     const events: { row: AnyRow; type: 'in' | 'out' }[] = [];
-    activeRows.forEach(r => {
+    calendarRows.forEach(r => {
       if (r.checkIn === date) events.push({ row: r, type: 'in' });
       if (r.checkOut === date) events.push({ row: r, type: 'out' });
     });
@@ -689,7 +695,7 @@ function ReservationCalendar({ property }: { property: string }) {
             </Modal>
           )}
           <div style={{ marginTop: 12, fontSize: 12, color: 'var(--muted, #64748b)' }}>
-            {activeRows.length} active reservations · {activeRows.filter(r => r.checkIn === today).length} check-ins today · {activeRows.filter(r => r.checkOut === today).length} check-outs today
+            {activeRows.length} active reservations · {calendarRows.filter(r => r.checkIn === today).length} check-ins today · {calendarRows.filter(r => r.checkOut === today).length} check-outs today
           </div>
         </>
       )}
