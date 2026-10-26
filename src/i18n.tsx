@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { api } from './api';
 
 type Language = 'en' | 'vi';
 const translations: Record<string, string> = {
@@ -109,6 +110,14 @@ const translations: Record<string, string> = {
   "Prototype security": "Bảo mật bản mẫu",
   "Demo mode does not implement real authentication or authorization. Do not enter real personal, payroll, or financial data.": "Chế độ dùng thử chưa triển khai xác thực và phân quyền thực tế. Không nhập dữ liệu cá nhân, tiền lương hoặc tài chính thật.",
   "This settings module has not been connected yet.": "Chức năng cài đặt này chưa được kết nối.",
+  "Workspace": "Không gian làm việc",
+  "Admin": "Quản trị viên",
+  "rooms": "phòng",
+  "rooms ": "phòng ",
+  "Floor": "Tầng",
+  "Search room number or type…": "Tìm số phòng hoặc loại phòng…",
+  "No rooms currently have this status.": "Hiện không có phòng nào ở trạng thái này.",
+  "Room": "Phòng",
   "Internal management system · Local API data": "Hệ thống quản lý nội bộ · Dữ liệu API cục bộ"
 };
 
@@ -119,6 +128,46 @@ const trackedAttrs = new WeakMap<Element, Map<string, Tracked>>();
 let activeLanguage: Language = 'en';
 let pageObserver: MutationObserver | null = null;
 let pageUpdate: (() => void) | null = null;
+let accountLanguage: Language | null = null;
+let languageListeners = new Set<(language: Language) => void>();
+
+function readLocalLanguage(): Language {
+  try {
+    return localStorage.getItem('hotel_language') === 'vi' ? 'vi' : 'en';
+  } catch {
+    return 'en';
+  }
+}
+
+export function setLanguagePreference(language: Language) {
+  accountLanguage = language;
+  activeLanguage = language;
+  try { localStorage.setItem('hotel_language', language); } catch {}
+  languageListeners.forEach(listener => listener(language));
+  pageUpdate?.();
+}
+
+export async function initializeAccountLanguage(savedLanguage?: string) {
+  const language: Language =
+    savedLanguage === 'en' || savedLanguage === 'vi'
+      ? savedLanguage
+      : readLocalLanguage();
+
+  setLanguagePreference(language);
+
+  // Persist the browser's current choice for older accounts that have no preference yet.
+  if (savedLanguage !== 'en' && savedLanguage !== 'vi') {
+    try {
+      await api.updateLanguage(language);
+    } catch (error) {
+      console.error('Could not save initial account language preference:', error);
+    }
+  }
+}
+
+export function clearAccountLanguage() {
+  accountLanguage = null;
+}
 
 function translated(original: string, language: Language): string {
   const value = original.trim();
@@ -133,11 +182,13 @@ function translated(original: string, language: Language): string {
 }
 
 export function LanguageToggle() {
-  const [language, setLanguage] = useState<Language>(() => {
-    try {
-      return localStorage.getItem('hotel_language') === 'vi' ? 'vi' : 'en';
-    } catch { return 'en'; }
-  });
+  const [language, setLanguage] = useState<Language>(() => accountLanguage || readLocalLanguage());
+
+  useEffect(() => {
+    const listener = (next: Language) => setLanguage(next);
+    languageListeners.add(listener);
+    return () => { languageListeners.delete(listener); };
+  }, []);
 
   useEffect(() => {
     activeLanguage = language;
@@ -209,13 +260,27 @@ export function LanguageToggle() {
       type="button"
       className={language === 'vi' ? 'language-option active' : 'language-option'}
       aria-pressed={language === 'vi'}
-      onClick={() => setLanguage('vi')}
+      onClick={() => {
+        setLanguagePreference('vi');
+        if (localStorage.getItem('hotel_auth_token')) {
+          void api.updateLanguage('vi').catch(error =>
+            console.error('Could not save language preference:', error)
+          );
+        }
+      }}
     >Tiếng Việt</button>
     <button
       type="button"
       className={language === 'en' ? 'language-option active' : 'language-option'}
       aria-pressed={language === 'en'}
-      onClick={() => setLanguage('en')}
+      onClick={() => {
+        setLanguagePreference('en');
+        if (localStorage.getItem('hotel_auth_token')) {
+          void api.updateLanguage('en').catch(error =>
+            console.error('Could not save language preference:', error)
+          );
+        }
+      }}
     >English</button>
   </div>;
 }

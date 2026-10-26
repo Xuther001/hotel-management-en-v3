@@ -481,6 +481,7 @@ type AuthUser = {
   jobTitle?: string;
   role: string;
   propertyIds: string[];
+  language?: 'en' | 'vi';
   salt: string;
   passwordHash: string;
   createdAt: string;
@@ -506,6 +507,7 @@ function publicUser(user: AuthUser) {
     jobTitle: user.jobTitle || '',
     role: user.role,
     propertyIds: user.propertyIds,
+    language: user.language === 'vi' ? 'vi' : 'en',
     createdAt: user.createdAt
   };
 }
@@ -672,6 +674,26 @@ app.post('/api/v1/auth/logout', (req, res) => {
 
 app.get('/api/v1/auth/me', (req, res) => {
   res.json({ data: (req as any).authUser });
+});
+
+app.patch('/api/v1/auth/preferences/language', (req, res) => {
+  const language = req.body?.language;
+  if (language !== 'en' && language !== 'vi') {
+    return res.status(400).json({ error: 'Language must be en or vi.' });
+  }
+
+  const currentUser = (req as any).authUser;
+  const users = readAuthUsers();
+  const user = users.find(u => u.id === currentUser?.id);
+
+  if (!user) {
+    return res.status(404).json({ error: 'User account was not found.' });
+  }
+
+  user.language = language;
+  saveAuthUsers(users);
+
+  res.json({ data: publicUser(user) });
 });
 
 app.get('/api/v1/admin/users', requireAdmin, (_req, res) => {

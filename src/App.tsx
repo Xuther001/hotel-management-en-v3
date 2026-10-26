@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, AreaChart, Area } from 'recharts';
 import { api, money, API_URL, clearAuthToken } from './api';
-import { LanguageToggle } from './i18n';
+import { LanguageToggle, initializeAccountLanguage, clearAccountLanguage } from './i18n';
 
 async function downloadBackup(
   url: string,
@@ -61,6 +61,7 @@ type AuthUser = {
   name: string;
   role: string;
   propertyIds?: string[];
+  language?: 'en' | 'vi';
 };
 const navGroups: { label: string; items: { to: string; label: string; icon: any; nested?: boolean }[] }[] = [
   { label: 'WORKSPACE', items: [
@@ -121,7 +122,9 @@ function LoginScreen({ onLogin }: { onLogin: (user: AuthUser) => void }) {
     setError('');
     try {
       const result = await api.login(username.trim(), password);
-      onLogin(result.data.user as AuthUser);
+      const authenticatedUser = result.data.user as AuthUser;
+      await initializeAccountLanguage(authenticatedUser.language);
+      onLogin(authenticatedUser);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Sign-in failed. Please try again.');
     } finally {
@@ -158,8 +161,12 @@ function App() {
   useEffect(() => {
     let active = true;
     api.me()
-      .then(result => {
-        if (active) setUser(result.data as AuthUser);
+      .then(async result => {
+        const authenticatedUser = result.data as AuthUser;
+        if (active) {
+          await initializeAccountLanguage(authenticatedUser.language);
+          if (active) setUser(authenticatedUser);
+        }
       })
       .catch(() => {
         clearAuthToken();
@@ -182,6 +189,7 @@ function App() {
       console.error('Server logout failed:', error);
     }).finally(() => {
       clearAuthToken();
+      clearAccountLanguage();
       setUser(null);
     });
   }}/>;

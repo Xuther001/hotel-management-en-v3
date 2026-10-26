@@ -30,6 +30,11 @@ export const api = {
     return result;
   },
   me: () => request<any>('/auth/me'),
+  updateLanguage: (language: 'en' | 'vi') =>
+    request<any>('/auth/preferences/language', {
+      method: 'PATCH',
+      body: JSON.stringify({ language })
+    }),
   logout: () => request<any>('/auth/logout', { method: 'POST' }),
   users: () => request<any>('/admin/users'),
   createUser: (data: {
