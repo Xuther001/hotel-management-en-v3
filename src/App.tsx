@@ -1245,7 +1245,7 @@ function Finance({section = 'billing'}: {section?: 'billing'|'installments'|'pay
   const [rows,setRows] = useState<AnyRow[]>([]);
   const [bills,setBills] = useState<AnyRow[]>([]);
   const [query,setQuery] = useState('');
-  const [billingStatusFilter, setBillingStatusFilter] = useState('All');
+  const [billingStatusFilter, setBillingStatusFilter] = useState('Overdue');
   const [open,setOpen] = useState(false);
   const [modal,setModal] = useState<'configure'|'payment'|'editPayment'|null>(null);
   const [selected,setSelected] = useState<AnyRow|null>(null);
@@ -1391,7 +1391,7 @@ function Finance({section = 'billing'}: {section?: 'billing'|'installments'|'pay
       <div className="mini-stat-grid"><div><span>Guest charges</span><strong>{money(charges)}</strong></div><div><span>Payments recorded</span><strong>{money(paid)}</strong></div><div><span>Outstanding balance</span><strong>{money(balance)}</strong></div><div><span>Due now</span><strong>{money(dueNow)}</strong></div><div><span>Overdue amount</span><strong>{money(overdueAmount)}</strong></div><div><span>Overdue accounts</span><strong>{bills.filter(r=>r.overdueAmount>0).length}</strong></div></div>
       <div className="notice"><AlertTriangle size={17}/><div><strong>Billing rules</strong><span>Daily stays are charged at the configured nightly rate multiplied by the number of nights, due on check-in. Monthly stays are prorated by actual calendar-month days and billed on each monthly check-in anniversary. Unpaid monthly bills have a grace period through noon on the fifth calendar day, Ho Chi Minh City time. Check-in night counts; checkout date does not. Existing reservations default to Daily, and no booking is assumed paid.</span></div></div>
       <div className="reservation-tabs billing-status-tabs" role="tablist" aria-label="Filter billing entries by status">
-        {['All', 'Upcoming', 'Due', 'Paid', 'Overdue', 'Setup needed'].map(status => (
+        {['Overdue', 'Due', 'Upcoming', 'Paid', 'Setup needed', 'All'].map(status => (
           <Button
             key={status}
             variant={billingStatusFilter === status ? 'primary' : 'secondary'}
