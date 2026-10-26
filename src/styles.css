@@ -2024,3 +2024,33 @@
     font-size: 11px;
   }
 }
+
+
+/* Desktop hotel dropdown option spacing */
+@media (min-width: 561px) {
+  .property-filter select {
+    text-indent: 4px;
+  }
+
+  .property-filter select option {
+    padding: 8px 12px;
+  }
+}
+
+
+/* Desktop hotel selector balanced spacing v2 */
+@media (min-width: 561px) {
+  .property-filter {
+    gap: 10px;
+    padding-left: 13px;
+    padding-right: 13px;
+  }
+
+  .property-filter select {
+    width: 135px;
+    max-width: 135px;
+    text-indent: 0;
+    padding-left: 5px;
+    padding-right: 5px;
+  }
+}
