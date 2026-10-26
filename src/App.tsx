@@ -196,7 +196,12 @@ function AuthenticatedApp({ user, onLogout }: { user: AuthUser; onLogout: () => 
   const refreshReservationCount = useCallback(async () => {
     try {
       const r = await api.reservations('', property);
-      setReservationCount((r.data || []).length);
+      const activeStatuses = ['Confirmed', 'Arriving today', 'Checked in'];
+      setReservationCount(
+        (r.data || []).filter((reservation: AnyRow) =>
+          activeStatuses.includes(reservation.status)
+        ).length
+      );
     } catch {
       setReservationCount(null);
     }
@@ -204,9 +209,16 @@ function AuthenticatedApp({ user, onLogout }: { user: AuthUser; onLogout: () => 
 
   useEffect(() => {
     let active = true;
+    const activeStatuses = ['Confirmed', 'Arriving today', 'Checked in'];
     api.reservations('', property)
       .then(r => {
-        if (active) setReservationCount((r.data || []).length);
+        if (active) {
+          setReservationCount(
+            (r.data || []).filter((reservation: AnyRow) =>
+              activeStatuses.includes(reservation.status)
+            ).length
+          );
+        }
       })
       .catch(() => {
         if (active) setReservationCount(null);
