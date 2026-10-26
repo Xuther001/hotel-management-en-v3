@@ -14,6 +14,15 @@ const translations: Record<string, string> = {
   "Reservations": "Đặt phòng",
   "Reservation Calendar": "Lịch đặt phòng",
   "Room management": "Quản lý phòng",
+  "View room availability, update operational status, and maintain room notes.": "Xem tình trạng phòng, cập nhật trạng thái vận hành và ghi chú phòng.",
+  "HOTEL OPERATIONS": "VẬN HÀNH KHÁCH SẠN",
+  "PROPERTY OPERATIONS": "VẬN HÀNH CƠ SỞ",
+  "Refresh": "Làm mới",
+  "Please wait…": "Vui lòng đợi…",
+  "View rooms ›": "Xem phòng ›",
+  "No note added.": "Chưa có ghi chú.",
+  "Add note": "Thêm ghi chú",
+  "Edit note": "Sửa ghi chú",
   "Human resources": "Nhân sự",
   "Finance & expenses": "Tài chính & chi phí",
   "Guest billing register": "Sổ công nợ khách",
@@ -83,6 +92,10 @@ type Tracked = { original: string; last: string };
 const trackedText = new WeakMap<Node, Tracked>();
 const trackedAttrs = new WeakMap<Element, Map<string, Tracked>>();
 
+let activeLanguage: Language = 'en';
+let pageObserver: MutationObserver | null = null;
+let pageUpdate: (() => void) | null = null;
+
 function translated(original: string, language: Language): string {
   const value = original.trim();
   if (!value) return original;
@@ -103,51 +116,68 @@ export function LanguageToggle() {
   });
 
   useEffect(() => {
+    activeLanguage = language;
     try { localStorage.setItem('hotel_language', language); } catch {}
     document.documentElement.lang = language;
 
     const update = () => {
       const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
       let node: Node | null;
+
       while ((node = walker.nextNode())) {
         const parent = node.parentElement;
         if (!parent || parent.closest('script,style,textarea,[contenteditable="true"]')) continue;
+
         const current = node.nodeValue || '';
         let record = trackedText.get(node);
+
         if (!record || current !== record.last) {
           record = { original: current, last: current };
           trackedText.set(node, record);
         }
-        const next = translated(record.original, language);
+
+        const next = translated(record.original, activeLanguage);
         if (next !== current) node.nodeValue = next;
         record.last = next;
       }
 
       document.querySelectorAll<HTMLElement>('[placeholder],[title],[aria-label]').forEach(el => {
         let records = trackedAttrs.get(el);
-        if (!records) { records = new Map(); trackedAttrs.set(el, records); }
+        if (!records) {
+          records = new Map();
+          trackedAttrs.set(el, records);
+        }
+
         for (const attr of ['placeholder', 'title', 'aria-label']) {
           const current = el.getAttribute(attr);
           if (current === null) continue;
+
           let record = records.get(attr);
           if (!record || current !== record.last) {
             record = { original: current, last: current };
             records.set(attr, record);
           }
-          const next = translated(record.original, language);
+
+          const next = translated(record.original, activeLanguage);
           if (next !== current) el.setAttribute(attr, next);
           record.last = next;
         }
       });
     };
 
+    pageUpdate = update;
     update();
-    const observer = new MutationObserver(update);
-    observer.observe(document.body, {
-      childList: true, subtree: true, characterData: true, attributes: true,
-      attributeFilter: ['placeholder', 'title', 'aria-label']
-    });
-    return () => observer.disconnect();
+
+    if (!pageObserver) {
+      pageObserver = new MutationObserver(() => pageUpdate?.());
+      pageObserver.observe(document.body, {
+        childList: true,
+        subtree: true,
+        characterData: true,
+        attributes: true,
+        attributeFilter: ['placeholder', 'title', 'aria-label']
+      });
+    }
   }, [language]);
 
   return <div className="language-toggle" role="group" aria-label="Language">
