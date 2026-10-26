@@ -2148,3 +2148,87 @@
 .settings-language .language-toggle {
   width: fit-content;
 }
+
+/* Guest billing register: compact responsive table */
+@media (min-width: 561px) {
+  .billing-register-scroll {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  .billing-register-table {
+    width: 100%;
+    table-layout: fixed;
+    white-space: normal;
+  }
+
+  .billing-register-table thead th {
+    padding: 0 6px 10px;
+    font-size: 8px;
+    line-height: 1.35;
+    letter-spacing: 0.2px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .billing-register-table tbody td {
+    padding: 10px 6px;
+    font-size: 10px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  /* Keep less essential details available below the guest name. */
+  .billing-register-table thead th:nth-child(4),
+  .billing-register-table tbody td:nth-child(4),
+  .billing-register-table thead th:nth-child(9),
+  .billing-register-table tbody td:nth-child(9),
+  .billing-register-table thead th:nth-child(10),
+  .billing-register-table tbody td:nth-child(10) {
+    display: none;
+  }
+
+  .billing-register-table .billing-mobile-details {
+    display: block;
+    margin-top: 6px;
+    font-size: 10px;
+  }
+
+  .billing-register-table .billing-mobile-details summary {
+    color: #416bd2;
+    cursor: pointer;
+    font-weight: 600;
+  }
+
+  .billing-register-table .billing-mobile-detail-content {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding-top: 6px;
+    color: #526075;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .billing-register-table .table-actions {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 5px;
+  }
+
+  .billing-register-table .table-actions .button {
+    min-width: 0;
+    max-width: 100%;
+    padding: 7px 6px;
+    font-size: 9px;
+    line-height: 1.3;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .billing-register-table .amount-cell {
+    text-align: left;
+  }
+}
