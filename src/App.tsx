@@ -1423,7 +1423,7 @@ function Finance({section = 'billing'}: {section?: 'billing'|'installments'|'pay
     date.setMonth(date.getMonth()-index);
     return {
       value: `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}`,
-      label: date.toLocaleDateString('en-US',{month:'long',year:'numeric'})
+      label: date.toLocaleDateString(document.documentElement.lang === 'vi' ? 'vi-VN' : 'en-US',{month:'long',year:'numeric'})
     };
   });
   const periodStart = period === 'all' ? '' : `${period}-01`;
