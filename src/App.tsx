@@ -699,7 +699,7 @@ function ReservationCalendar({ property }: { property: string }) {
                         <button
                           key={type}
                           type="button"
-                          className={`calendar-count-button ${type === 'in' ? 'check-in' : 'check-out'}`}
+                          className={`calendar-count-button ${type === 'in' ? 'check-in' : 'check-out'} ${isVietnamese ? 'vietnamese' : ''}`}
                           aria-label={`${count} check-${type === 'in' ? 'ins' : 'outs'} on ${key}`}
                           onClick={() => setSelectedEventList({
                             date: key,
