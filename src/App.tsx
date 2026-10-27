@@ -4,7 +4,7 @@ import {
   LayoutDashboard, BedDouble, CalendarDays, Users, Wallet, Package, Wrench,
   ChartNoAxesCombined, Settings, Bell, Search, Menu, Plus, ArrowUpRight, ArrowDownRight,
   CheckCircle2, AlertTriangle, Clock3, ChevronDown, Building2, LogOut, X, RefreshCw,
-  UserRound, CalendarCheck, ClipboardList, FileText, CircleDollarSign, Sparkles
+  UserRound, CalendarCheck, ClipboardList, FileText, CircleDollarSign, Sparkles, BookOpen
 } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, AreaChart, Area } from 'recharts';
 import { api, money, API_URL, clearAuthToken } from './api';
@@ -83,6 +83,7 @@ const navGroups: { label: string; items: { to: string; label: string; icon: any;
   ]},
   { label: 'MANAGEMENT', items: [
     { to: '/reports', label: 'Reports & analytics', icon: ChartNoAxesCombined },
+    { to: '/help', label: 'Help & User Guide', icon: BookOpen },
     { to: '/settings', label: 'Settings', icon: Settings },
   ]}
 ];
@@ -94,7 +95,7 @@ const titleMap: Record<string, string> = {
   '/finance/payments': 'Payment history',
   '/finance/expenses': 'Expenses',
   '/inventory': 'Inventory',
-  '/maintenance': 'Maintenance', '/reports': 'Reports & analytics', '/settings': 'Settings'
+  '/maintenance': 'Maintenance', '/reports': 'Reports & analytics', '/help': 'Help & User Guide', '/settings': 'Settings'
 };
 function Badge({ children, tone = 'neutral' }: { children: ReactNode; tone?: string }) {
   return <span className={`badge ${tone}`}>{children}</span>;
@@ -235,7 +236,10 @@ function AuthenticatedApp({ user, onLogout }: { user: AuthUser; onLogout: () => 
     return () => { active = false; };
   }, [property]);
   const location = useLocation();
-  const pageTitle = titleMap[location.pathname] || 'Business management';
+  const isVietnamese = useLanguage() === 'vi';
+  const pageTitle = isVietnamese
+    ? ({ '/help': 'Hướng dẫn sử dụng' }[location.pathname] || titleMap[location.pathname] || 'Quản lý doanh nghiệp')
+    : (titleMap[location.pathname] || 'Business management');
   useEffect(() => { api.properties().then(r => setProperties(r.data)).catch(() => {}); }, []);
   return <div className="app-shell">
     <div aria-hidden="true" style={{ display: 'none' }}>
@@ -244,7 +248,7 @@ function AuthenticatedApp({ user, onLogout }: { user: AuthUser; onLogout: () => 
     <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
       <div className="brand"><div className="brand-mark"><Building2 size={20}/></div><div><strong>Haven Group</strong><span>BUSINESS MANAGEMENT</span></div><button className="icon-button mobile-close" onClick={() => setSidebarOpen(false)}><X size={18}/></button></div>
       <div className="workspace-select"><div className="workspace-icon"><Building2 size={17}/></div><div><span>WORKSPACE</span><strong>Hospitality Group</strong></div><ChevronDown size={15}/></div>
-      <nav>{navGroups.map(group => <div className="nav-group" key={group.label}><span className="nav-label">{group.label}</span>{group.items.map(item => { const Icon = item.icon; return <NavLink end={item.to === '/' || item.to === '/finance'} to={item.to} key={item.to} onClick={() => setSidebarOpen(false)} className={({isActive}) => `nav-link ${item.nested ? 'nav-sub-link' : ''} ${isActive ? 'active' : ''}`}><Icon size={item.nested ? 16 : 18}/><span>{item.label}</span>{item.to === '/reservations' && <small className="nav-count">{reservationCount === null ? "—" : reservationCount}</small>}</NavLink>; })}</div>)}</nav>
+      <nav>{navGroups.map(group => <div className="nav-group" key={group.label}><span className="nav-label">{group.label}</span>{group.items.map(item => { const Icon = item.icon; return <NavLink end={item.to === '/' || item.to === '/finance'} to={item.to} key={item.to} onClick={() => setSidebarOpen(false)} className={({isActive}) => `nav-link ${item.nested ? 'nav-sub-link' : ''} ${isActive ? 'active' : ''}`}><Icon size={item.nested ? 16 : 18}/><span>{item.to === '/help' && isVietnamese ? 'Hướng dẫn sử dụng' : item.label}</span>{item.to === '/reservations' && <small className="nav-count">{reservationCount === null ? "—" : reservationCount}</small>}</NavLink>; })}</div>)}</nav>
       <div className="sidebar-bottom"><div className="user-mini"><div className="avatar">{user.name.slice(0, 2).toUpperCase()}</div><div><strong>{user.name}</strong><span>{user.role}</span></div><button className="icon-button" title="Sign out" onClick={onLogout}><LogOut size={16}/></button></div></div>
     </aside>
     {sidebarOpen && <button className="scrim" onClick={() => setSidebarOpen(false)} aria-label="Close navigation"/>}
@@ -265,11 +269,252 @@ function AuthenticatedApp({ user, onLogout }: { user: AuthUser; onLogout: () => 
         <Route path="/maintenance" element={<Maintenance />} />
 
         <Route path="/reports" element={<Reports property={property}/>} />
+        <Route path="/help" element={<HelpPage />} />
         <Route path="/settings" element={<SettingsPage />} />
       </Routes><footer>© 2026 Haven Group <span>Internal management system · Local API data</span></footer></div>
     </main>
   </div>;
 }
+function HelpPage() {
+  const vi = useLanguage() === 'vi';
+
+  const topics = [
+    {
+      title: vi ? '1. Tổng quan và chọn khách sạn' : '1. Dashboard and hotel selection',
+      summary: vi ? 'Xem hoạt động và chọn phạm vi khách sạn.' : 'Review operations and choose the hotel scope.',
+      steps: vi
+        ? [
+            'Mở Tổng quan để xem thông tin hoạt động hiện có.',
+            'Dùng bộ chọn khách sạn ở thanh trên cùng để chọn một khách sạn hoặc Tất cả khách sạn.',
+            'Kiểm tra phạm vi khách sạn trước khi xem số liệu hoặc báo cáo.'
+          ]
+        : [
+            'Open Dashboard to review the available operational information.',
+            'Use the hotel selector in the top bar to choose one hotel or All hotels.',
+            'Check the hotel scope before reviewing figures or reports.'
+          ]
+    },
+    {
+      title: vi ? '2. Đặt phòng và lịch đặt phòng' : '2. Reservations and calendar',
+      summary: vi ? 'Theo dõi đặt phòng, thông tin khách và ngày lưu trú.' : 'Review bookings, guest details, and stay dates.',
+      steps: vi
+        ? [
+            'Mở Đặt phòng để xem và thao tác với các đặt phòng.',
+            'Kiểm tra tên khách, phòng, ngày nhận phòng, ngày trả phòng và trạng thái trước khi lưu.',
+            'Mở Lịch đặt phòng để xem lịch nhận và trả phòng.',
+            'Kiểm tra khách sạn và dữ liệu đã chọn trước khi xuất Excel.'
+          ]
+        : [
+            'Open Reservations to review and manage bookings.',
+            'Check the guest name, room, arrival date, departure date, and status before saving.',
+            'Open Reservation Calendar to review scheduled arrivals and departures.',
+            'Verify the selected hotel and data before exporting to Excel.'
+          ]
+    },
+    {
+      title: vi ? '3. Quản lý phòng' : '3. Room management',
+      summary: vi ? 'Theo dõi tình trạng phòng, vệ sinh và ghi chú.' : 'Track occupancy, housekeeping, and room notes.',
+      steps: vi
+        ? [
+            'Mở Quản lý phòng và xác nhận đúng số phòng, khách sạn.',
+            'Trạng thái sử dụng phòng gồm Có khách, Trống hoặc Bảo trì.',
+            'Trạng thái vệ sinh là riêng biệt: Sạch hoặc Bẩn.',
+            'Đọc ghi chú phòng trước khi bàn giao hoặc cập nhật.'
+          ]
+        : [
+            'Open Room Management and confirm the room number and hotel.',
+            'Occupancy statuses are Occupied, Vacant, and Maintenance.',
+            'Housekeeping status is separate: Clean or Dirty.',
+            'Review room notes before handover or updates.'
+          ]
+    },
+    {
+      title: vi ? '4. Nhân sự' : '4. Human resources',
+      summary: vi ? 'Xem và cập nhật thông tin nhân viên theo quyền được cấp.' : 'Review and update employee information according to your permissions.',
+      steps: vi
+        ? [
+            'Mở Nhân sự để xem danh sách nhân viên.',
+            'Kiểm tra thông tin và chức danh trước khi chỉnh sửa.',
+            'Chỉ cập nhật thông tin bạn được phép quản lý.'
+          ]
+        : [
+            'Open Human Resources to review the employee list.',
+            'Check employee information and job titles before editing.',
+            'Only update information you are authorized to manage.'
+          ]
+    },
+    {
+      title: vi ? '5. Hóa đơn và thanh toán' : '5. Billing and payments',
+      summary: vi ? 'Phân biệt hóa đơn, lịch thanh toán và lịch sử thanh toán.' : 'Understand billing, installment schedules, and payment history.',
+      steps: vi
+        ? [
+            'Mở Sổ ghi nhận hóa đơn khách để xem các khoản thu và số dư hiển thị.',
+            'Mở Phân tích thanh toán theo tháng để xem lịch thanh toán theo đợt.',
+            'Mở Lịch sử thanh toán để kiểm tra các khoản đã ghi nhận.',
+            'Kiểm tra thông tin trước khi ghi nhận thanh toán hoặc thay đổi cấu hình tính phí.'
+          ]
+        : [
+            'Open Guest Billing Register to review displayed charges and balances.',
+            'Open Monthly Installment Breakdown to review installment schedules.',
+            'Open Payment History to check recorded payments.',
+            'Verify details before recording payments or changing billing configuration.'
+          ]
+    },
+    {
+      title: vi ? '6. Chi phí' : '6. Expenses',
+      summary: vi ? 'Theo dõi chi phí hoạt động.' : 'Review operating expenses.',
+      steps: vi
+        ? [
+            'Mở Chi phí để xem các khoản chi đã được ghi nhận.',
+            'Kiểm tra số tiền, ngày và thông tin liên quan trước khi thêm hoặc chỉnh sửa dữ liệu.',
+            'Đối chiếu chứng từ thực tế theo quy trình của khách sạn.'
+          ]
+        : [
+            'Open Expenses to review recorded operating costs.',
+            'Verify amounts, dates, and related details before adding or editing records.',
+            'Reconcile entries with actual supporting documents according to hotel procedures.'
+          ]
+    },
+    {
+      title: vi ? '7. Bảo trì và kho vật tư' : '7. Maintenance and inventory',
+      summary: vi ? 'Kiểm tra công việc bảo trì và trạng thái tính năng kho.' : 'Review maintenance work and inventory feature availability.',
+      steps: vi
+        ? [
+            'Mở Bảo trì để xem các công việc được theo dõi.',
+            'Kiểm tra nội dung và trạng thái trước khi cập nhật.',
+            'Kho vật tư hiện có thể hiển thị thông báo đang phát triển; không xem đó là xác nhận tồn kho thực tế.'
+          ]
+        : [
+            'Open Maintenance to review tracked maintenance work.',
+            'Check task details and status before updating.',
+            'Inventory may currently show a coming-soon message; do not treat it as confirmation of actual stock levels.'
+          ]
+    },
+    {
+      title: vi ? '8. Báo cáo và phân tích' : '8. Reports and analytics',
+      summary: vi ? 'Xem báo cáo trong phạm vi khách sạn đã chọn.' : 'Review reports for the selected hotel scope.',
+      steps: vi
+        ? [
+            'Mở Báo cáo & phân tích.',
+            'Kiểm tra khách sạn và kỳ báo cáo trước khi diễn giải số liệu.',
+            'Xác minh dữ liệu nguồn và quy tắc tính toán trước khi dùng số liệu cho kế toán hoặc quyết định kinh doanh.'
+          ]
+        : [
+            'Open Reports & Analytics.',
+            'Check the selected hotel and reporting period before interpreting figures.',
+            'Verify source data and calculation rules before relying on figures for accounting or business decisions.'
+          ]
+    },
+    {
+      title: vi ? '9. Cài đặt và thông báo' : '9. Settings and notifications',
+      summary: vi ? 'Kiểm tra tùy chọn ứng dụng và thông báo.' : 'Review application settings and notifications.',
+      steps: vi
+        ? [
+            'Mở Cài đặt để xem các tùy chọn hiện có.',
+            'Dùng nút ngôn ngữ nếu có để chuyển giữa tiếng Việt và English.',
+            'Nếu thông báo không xuất hiện, kiểm tra quyền thông báo của trình duyệt và thiết bị.',
+            'Không chia sẻ thông tin đăng nhập với người khác.'
+          ]
+        : [
+            'Open Settings to review the available options.',
+            'Use the language control, when available, to switch between Vietnamese and English.',
+            'If notifications do not appear, check browser and device notification permissions.',
+            'Do not share login credentials with others.'
+          ]
+    },
+    {
+      title: vi ? '10. Quy trình làm việc hằng ngày' : '10. Recommended daily workflow',
+      summary: vi ? 'Danh sách kiểm tra đầu ca, nhận phòng, trả phòng và cuối ca.' : 'A checklist for shift start, guest arrivals, departures, and shift end.',
+      steps: vi
+        ? [
+            'Đầu ca: chọn đúng khách sạn, xem đặt phòng và lịch nhận/trả phòng.',
+            'Khách đến: xác minh đặt phòng, thông tin khách và phòng trước khi làm thủ tục.',
+            'Khách trả phòng: xác minh đặt phòng, thông tin thanh toán và tình trạng phòng.',
+            'Cuối ca: kiểm tra cập nhật đặt phòng, tình trạng phòng, khoản thanh toán và công việc còn tồn.',
+            'Báo quản lý nếu dữ liệu không khớp hoặc thao tác chưa hoàn tất.'
+          ]
+        : [
+            'Start of shift: select the correct hotel and review reservations and the arrival/departure calendar.',
+            'Guest arrival: verify the booking, guest details, and room before completing check-in.',
+            'Guest departure: verify the booking, payment information, and room condition.',
+            'End of shift: review reservation updates, room conditions, recorded payments, and outstanding work.',
+            'Tell a manager if records do not match or an operation remains incomplete.'
+          ]
+    }
+  ];
+
+  return <>
+    <PageHeader
+      eyebrow={vi ? 'TRỢ GIÚP' : 'HELP & SUPPORT'}
+      title={vi ? 'Hướng dẫn sử dụng' : 'Help & User Guide'}
+      description={vi
+        ? 'Hướng dẫn nhanh cho nhân viên lễ tân, vận hành và quản lý khách sạn.'
+        : 'A practical guide for front desk staff, hotel operations, and management.'}
+    />
+    <Panel
+      title={vi ? 'Bắt đầu tại đây' : 'Start here'}
+      subtitle={vi ? 'Chọn một chủ đề để xem hướng dẫn.' : 'Select a topic to read its instructions.'}
+    >
+      <div style={{ display: 'grid', gap: 10 }}>
+        {topics.map((topic, index) => (
+          <details
+            key={topic.title}
+            open={index === 0 ? undefined : false}
+            style={{
+              border: '1px solid var(--border, #e2e8f0)',
+              borderRadius: 10,
+              padding: '13px 15px',
+              background: 'var(--panel, #fff)'
+            }}
+          >
+            <summary style={{
+              cursor: 'pointer',
+              fontWeight: 700,
+              fontSize: 13,
+              lineHeight: 1.5
+            }}>
+              {topic.title}
+              <div style={{
+                fontWeight: 400,
+                fontSize: 12,
+                color: 'var(--muted, #718096)',
+                marginTop: 4
+              }}>
+                {topic.summary}
+              </div>
+            </summary>
+            <ol style={{
+              paddingLeft: 22,
+              margin: '14px 0 2px',
+              fontSize: 12.5,
+              lineHeight: 1.8
+            }}>
+              {topic.steps.map((step, i) => (
+                <li key={i} style={{ paddingLeft: 3, marginBottom: 7 }}>{step}</li>
+              ))}
+            </ol>
+          </details>
+        ))}
+      </div>
+    </Panel>
+    <div style={{
+      marginTop: 16,
+      border: '1px solid var(--border, #e2e8f0)',
+      borderRadius: 10,
+      padding: 15,
+      fontSize: 12,
+      lineHeight: 1.7
+    }}>
+      <strong>{vi ? 'Lưu ý về dữ liệu' : 'Data reminder'}</strong>
+      <p style={{ margin: '6px 0 0' }}>
+        {vi
+          ? 'Kiểm tra thông tin trước khi lưu thay đổi. Xác minh dữ liệu nguồn và quy tắc tính toán trước khi sử dụng số liệu báo cáo. Chỉ chia sẻ thông tin khách trong phạm vi được phép.'
+          : 'Verify information before saving changes. Check source data and calculation rules before relying on report figures. Share guest information only through authorized channels.'}
+      </p>
+    </div>
+  </>;
+}
+
 function PageHeader({ eyebrow, title, description, actions }: { eyebrow?: string; title: string; description: string; actions?: ReactNode }) {
   return <div className="page-header"><div><div className="eyebrow">{eyebrow || 'OVERVIEW'}</div><h1>{title}</h1><p>{description}</p></div>{actions && <div className="header-actions">{actions}</div>}</div>;
 }
