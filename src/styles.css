@@ -1,3 +1,55 @@
+
+/* Mobile table label translations */
+html[lang="en"] {
+  --mobile-amount: "AMOUNT";
+  --mobile-actions: "ACTIONS";
+  --mobile-reservation-guest: "Reservation / guest";
+  --mobile-room: "Room";
+  --mobile-rental-type: "Rental type";
+  --mobile-stay: "Stay";
+  --mobile-charges: "Charges";
+  --mobile-paid: "Paid";
+  --mobile-balance: "Balance";
+  --mobile-due-now: "Due now";
+  --mobile-overdue: "Overdue";
+  --mobile-oldest-due: "Oldest unpaid due date";
+  --mobile-status: "Status";
+  --mobile-guest: "GUEST";
+  --mobile-billing-type: "BILLING TYPE";
+  --mobile-due-date: "Due date";
+  --mobile-charge: "Charge";
+  --mobile-allocated-paid: "Allocated paid";
+  --mobile-remaining: "Remaining";
+  --mobile-date-payment: "Date / payment";
+  --mobile-method: "Method";
+  --mobile-notes: "Notes";
+}
+
+html[lang="vi"] {
+  --mobile-amount: "THÀNH TIỀN";
+  --mobile-actions: "THAO TÁC";
+  --mobile-reservation-guest: "ĐẶT PHÒNG / KHÁCH";
+  --mobile-room: "PHÒNG";
+  --mobile-rental-type: "LOẠI LƯU TRÚ";
+  --mobile-stay: "THỜI GIAN LƯU TRÚ";
+  --mobile-charges: "CÁC KHOẢN PHẢI THU";
+  --mobile-paid: "ĐÃ THANH TOÁN";
+  --mobile-balance: "SỐ DƯ CÒN LẠI";
+  --mobile-due-now: "ĐẾN HẠN HIỆN TẠI";
+  --mobile-overdue: "QUÁ HẠN";
+  --mobile-oldest-due: "NGÀY ĐẾN HẠN CHƯA THANH TOÁN CŨ NHẤT";
+  --mobile-status: "TRẠNG THÁI";
+  --mobile-guest: "KHÁCH";
+  --mobile-billing-type: "LOẠI THANH TOÁN";
+  --mobile-due-date: "NGÀY ĐẾN HẠN";
+  --mobile-charge: "KHOẢN PHẢI THU";
+  --mobile-allocated-paid: "ĐÃ PHÂN BỔ THANH TOÁN";
+  --mobile-remaining: "CÒN LẠI";
+  --mobile-date-payment: "NGÀY / THANH TOÁN";
+  --mobile-method: "PHƯƠNG THỨC";
+  --mobile-notes: "GHI CHÚ";
+}
+
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap');
 :root{font-family:'DM Sans',sans-serif;color:#202b3c;background:#f6f8fb;font-synthesis:none;text-rendering:optimizeLegibility;font-weight:400;font-size:14px;--navy:#172b4d;--blue:#4779ed;--muted:#8390a3;--border:#e7ebf2;--green:#168c68;--red:#c64b55;--amber:#a96a10}
 *{box-sizing:border-box}body{margin:0;min-width:320px}button,input,select{font:inherit}button{cursor:pointer}.app-shell{min-height:100vh}.sidebar{position:fixed;z-index:20;left:0;top:0;bottom:0;width:258px;background:#fff;border-right:1px solid var(--border);display:flex;flex-direction:column;padding:22px 15px 14px}.brand{display:flex;align-items:center;gap:11px;padding:0 7px 24px}.brand-mark{width:38px;height:38px;border-radius:12px;background:var(--navy);color:#fff;display:grid;place-items:center}.brand strong{display:block;font-family:Manrope,sans-serif;font-size:16px;font-weight:800;letter-spacing:-.3px}.brand span{display:block;font-size:9px;letter-spacing:1.25px;color:#8b95a5;margin-top:3px}.workspace-select{display:flex;align-items:center;gap:9px;padding:11px;border:1px solid var(--border);border-radius:10px;margin-bottom:22px}.workspace-icon{width:32px;height:32px;border-radius:8px;background:#eff4ff;color:var(--blue);display:grid;place-items:center}.workspace-select>div:nth-child(2){flex:1}.workspace-select span{display:block;color:#8993a4;font-size:9px;letter-spacing:.8px;margin-bottom:3px}.workspace-select strong{font-size:12px}.workspace-select>svg{color:#9ba5b4}.nav-group{margin-bottom:23px}.nav-label{display:block;font-size:10px;font-weight:700;letter-spacing:1.15px;color:#9aa3b1;padding:0 11px 9px}.nav-link{height:40px;display:flex;align-items:center;gap:12px;padding:0 11px;border-radius:8px;text-decoration:none;color:#6c788b;font-size:12.5px;font-weight:500;margin:2px 0;transition:.15s}.nav-link:hover{background:#f5f7fb;color:#2c3c54}.nav-link.active{color:#315fce;background:#edf3ff;font-weight:700}.nav-link.active svg{stroke-width:2.3}.nav-link span{flex:1}.nav-count{font-size:10px;background:#fff;border:1px solid #dfe8ff;color:#4779ed;border-radius:5px;padding:2px 6px}.sidebar-bottom{margin-top:auto}.help-card{border:1px solid #e6ebf5;border-radius:11px;padding:13px;margin-bottom:15px;background:linear-gradient(145deg,#fbfcff,#f6f8fd)}.help-icon{width:28px;height:28px;border-radius:8px;background:#eaf0ff;color:#4779ed;display:grid;place-items:center;margin-bottom:8px}.help-card strong{font-size:12px}.help-card p{font-size:11px;color:#8490a2;line-height:1.5;margin:5px 0 9px}.help-card button{border:0;background:none;color:#416bd2;font-size:11px;font-weight:700;padding:0;display:flex;align-items:center;gap:5px}.user-mini{display:flex;align-items:center;gap:9px;padding:12px 4px 0;border-top:1px solid var(--border)}.avatar{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:#e8efff;color:#365fc1;font-weight:700;font-size:11px;flex-shrink:0}.user-mini>div:nth-child(2){flex:1;min-width:0}.user-mini strong,.top-user strong{font-size:11px;display:block}.user-mini span,.top-user span{font-size:10px;color:#8b96a6;display:block;margin-top:3px}.icon-button{border:0;background:transparent;color:#7d899b;display:inline-grid;place-items:center;width:34px;height:34px;border-radius:8px;position:relative}.icon-button:hover{background:#f2f5fa;color:#30415a}.mobile-menu,.mobile-close{display:none}.main-area{margin-left:258px;min-height:100vh}.topbar{height:72px;background:rgba(255,255,255,.92);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 32px;position:sticky;top:0;z-index:10;backdrop-filter:blur(12px)}.breadcrumbs{font-size:12px;color:#8792a3}.breadcrumbs span{margin:0 9px;color:#c2c9d3}.breadcrumbs strong{color:#364359;font-weight:600}.top-actions{display:flex;align-items:center;gap:13px}.property-filter{height:36px;display:flex;align-items:center;gap:8px;padding:0 10px;border:1px solid var(--border);border-radius:8px;color:#68768a;background:#fff}.property-filter select{appearance:none;border:0;outline:0;color:#39475b;background:transparent;font-size:10px;max-width:150px;width:105px;cursor:pointer}.notification i{position:absolute;width:6px;height:6px;border-radius:50%;background:#e85d68;right:7px;top:6px;border:1px solid #fff}.top-divider{height:30px;width:1px;background:var(--border);margin:0 3px}.top-user{display:flex;align-items:center;gap:9px}.top-user>div:nth-child(2){min-width:105px}.page-wrap{max-width:1660px;margin:0 auto;padding:29px 32px 20px}.page-header{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;margin-bottom:23px}.eyebrow{font-size:10px;letter-spacing:1.25px;font-weight:700;color:#8090a5;margin-bottom:8px}.page-header h1{font-family:Manrope,sans-serif;font-size:26px;line-height:1.2;letter-spacing:-.8px;margin:0;color:#1d2a3c;font-weight:800}.page-header p{color:#8691a2;margin:8px 0 0;font-size:12.5px}.header-actions{display:flex;align-items:center;gap:9px;flex-shrink:0}.button{border:1px solid transparent;border-radius:8px;min-height:36px;padding:0 13px;display:inline-flex;align-items:center;justify-content:center;gap:7px;font-size:11.5px;font-weight:700;transition:.15s;white-space:nowrap}.button.primary{background:#315fce;color:#fff;box-shadow:0 2px 4px #315fce20}.button.primary:hover{background:#244eaf}.button.secondary{background:#fff;border-color:#dfe5ee;color:#4e5b70}.button.secondary:hover{background:#f7f9fc}
@@ -624,11 +676,11 @@
   }
 
   .reservation-table:not(.compact) tbody td:nth-child(7)::before {
-    content: "AMOUNT";
+    content: var(--mobile-amount, "AMOUNT");
   }
 
   .reservation-table:not(.compact) tbody td:nth-child(8)::before {
-    content: "ACTIONS";
+    content: var(--mobile-actions, "ACTIONS");
   }
 
   .reservation-table:not(.compact) tbody td::before {
@@ -1461,17 +1513,17 @@
     text-transform: uppercase;
   }
 
-  .billing-register-table tbody td:nth-child(1)::before { content: "Reservation / guest"; }
-  .billing-register-table tbody td:nth-child(2)::before { content: "Room"; }
-  .billing-register-table tbody td:nth-child(3)::before { content: "Rental type"; }
-  .billing-register-table tbody td:nth-child(4)::before { content: "Stay"; }
-  .billing-register-table tbody td:nth-child(5)::before { content: "Charges"; }
-  .billing-register-table tbody td:nth-child(6)::before { content: "Paid"; }
-  .billing-register-table tbody td:nth-child(7)::before { content: "Balance"; }
-  .billing-register-table tbody td:nth-child(8)::before { content: "Due now"; }
-  .billing-register-table tbody td:nth-child(9)::before { content: "Overdue"; }
-  .billing-register-table tbody td:nth-child(10)::before { content: "Oldest unpaid due date"; }
-  .billing-register-table tbody td:nth-child(11)::before { content: "Status"; }
+  .billing-register-table tbody td:nth-child(1)::before { content: var(--mobile-reservation-guest, "Reservation / guest"); }
+  .billing-register-table tbody td:nth-child(2)::before { content: var(--mobile-room, "Room"); }
+  .billing-register-table tbody td:nth-child(3)::before { content: var(--mobile-rental-type, "Rental type"); }
+  .billing-register-table tbody td:nth-child(4)::before { content: var(--mobile-stay, "Stay"); }
+  .billing-register-table tbody td:nth-child(5)::before { content: var(--mobile-charges, "Charges"); }
+  .billing-register-table tbody td:nth-child(6)::before { content: var(--mobile-paid, "Paid"); }
+  .billing-register-table tbody td:nth-child(7)::before { content: var(--mobile-balance, "Balance"); }
+  .billing-register-table tbody td:nth-child(8)::before { content: var(--mobile-due-now, "Due now"); }
+  .billing-register-table tbody td:nth-child(9)::before { content: var(--mobile-overdue, "Overdue"); }
+  .billing-register-table tbody td:nth-child(10)::before { content: var(--mobile-oldest-due, "Oldest unpaid due date"); }
+  .billing-register-table tbody td:nth-child(11)::before { content: var(--mobile-status, "Status"); }
 
   .billing-register-table tbody td:nth-child(12) {
     padding-top: 12px;
@@ -1553,39 +1605,39 @@
   }
 
   .billing-register-table tbody td:nth-child(1)::before {
-    content: "GUEST";
+    content: var(--mobile-guest, "GUEST");
   }
 
   .billing-register-table tbody td:nth-child(2)::before {
-    content: "ROOM";
+    content: var(--mobile-room, "ROOM");
   }
 
   .billing-register-table tbody td:nth-child(3)::before {
-    content: "BILLING TYPE";
+    content: var(--mobile-billing-type, "BILLING TYPE");
   }
 
   .billing-register-table tbody td:nth-child(5)::before {
-    content: "CHARGES";
+    content: var(--mobile-charges, "CHARGES");
   }
 
   .billing-register-table tbody td:nth-child(6)::before {
-    content: "PAID";
+    content: var(--mobile-paid, "PAID");
   }
 
   .billing-register-table tbody td:nth-child(7)::before {
-    content: "BALANCE";
+    content: var(--mobile-balance, "BALANCE");
   }
 
   .billing-register-table tbody td:nth-child(8)::before {
-    content: "DUE NOW";
+    content: var(--mobile-due-now, "DUE NOW");
   }
 
   .billing-register-table tbody td:nth-child(11)::before {
-    content: "STATUS";
+    content: var(--mobile-status, "STATUS");
   }
 
   .billing-register-table tbody td:nth-child(12)::before {
-    content: "ACTIONS";
+    content: var(--mobile-actions, "ACTIONS");
   }
 
   .billing-register-table tbody td:nth-child(5),
@@ -1728,31 +1780,31 @@
   }
 
   .installment-breakdown-table tbody td:nth-child(1)::before {
-    content: "Due date";
+    content: var(--mobile-due-date, "Due date");
   }
 
   .installment-breakdown-table tbody td:nth-child(2)::before {
-    content: "Reservation / guest";
+    content: var(--mobile-reservation-guest, "Reservation / guest");
   }
 
   .installment-breakdown-table tbody td:nth-child(3)::before {
-    content: "Room";
+    content: var(--mobile-room, "Room");
   }
 
   .installment-breakdown-table tbody td:nth-child(4)::before {
-    content: "Charge";
+    content: var(--mobile-charge, "Charge");
   }
 
   .installment-breakdown-table tbody td:nth-child(5)::before {
-    content: "Allocated paid";
+    content: var(--mobile-allocated-paid, "Allocated paid");
   }
 
   .installment-breakdown-table tbody td:nth-child(6)::before {
-    content: "Remaining";
+    content: var(--mobile-remaining, "Remaining");
   }
 
   .installment-breakdown-table tbody td:nth-child(7)::before {
-    content: "Status";
+    content: var(--mobile-status, "Status");
   }
 
   .installment-breakdown-table tbody td:nth-child(7) {
@@ -1768,27 +1820,27 @@
   }
 
   .payment-history-table tbody td:nth-child(1)::before {
-    content: "Date / payment";
+    content: var(--mobile-date-payment, "Date / payment");
   }
 
   .payment-history-table tbody td:nth-child(2)::before {
-    content: "Reservation / guest";
+    content: var(--mobile-reservation-guest, "Reservation / guest");
   }
 
   .payment-history-table tbody td:nth-child(3)::before {
-    content: "Method";
+    content: var(--mobile-method, "Method");
   }
 
   .payment-history-table tbody td:nth-child(4)::before {
-    content: "Notes";
+    content: var(--mobile-notes, "Notes");
   }
 
   .payment-history-table tbody td:nth-child(5)::before {
-    content: "Amount";
+    content: var(--mobile-amount, "Amount");
   }
 
   .payment-history-table tbody td:nth-child(6)::before {
-    content: "Actions";
+    content: var(--mobile-actions, "Actions");
   }
 
   .payment-history-table tbody td:nth-child(6) {

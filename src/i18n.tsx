@@ -68,6 +68,9 @@ const translations: Record<string, string> = {
   "Save changes": "Lưu thay đổi",
   "No payments recorded in this period.": "Không có khoản thanh toán nào được ghi nhận trong kỳ này.",
   "Figures through": "Số liệu tính đến",
+  "View details": "Xem chi tiết",
+  "GUEST": "KHÁCH",
+  "BILLING TYPE": "LOẠI THANH TOÁN",
   "RESERVATION / GUEST": "ĐẶT PHÒNG / KHÁCH",
   "TYPE": "LOẠI LƯU TRÚ",
   "STAY DURATION": "THỜI GIAN LƯU TRÚ",
@@ -467,7 +470,14 @@ export function LanguageToggle() {
         const current = node.nodeValue || '';
         let record = trackedText.get(node);
 
-        if (!record || current !== record.last) {
+        if (
+          !record ||
+          (
+            current !== record.last &&
+            current !== translated(record.original, 'en') &&
+            current !== translated(record.original, 'vi')
+          )
+        ) {
           record = { original: current, last: current };
           trackedText.set(node, record);
         }
@@ -489,7 +499,14 @@ export function LanguageToggle() {
           if (current === null) continue;
 
           let record = records.get(attr);
-          if (!record || current !== record.last) {
+          if (
+            !record ||
+            (
+              current !== record.last &&
+              current !== translated(record.original, 'en') &&
+              current !== translated(record.original, 'vi')
+            )
+          ) {
             record = { original: current, last: current };
             records.set(attr, record);
           }
