@@ -600,27 +600,27 @@
   }
 
   .reservation-table:not(.compact) tbody td:nth-child(1)::before {
-    content: "GUEST";
+    content: attr(data-label);
   }
 
   .reservation-table:not(.compact) tbody td:nth-child(2)::before {
-    content: "HOTEL";
+    content: attr(data-label);
   }
 
   .reservation-table:not(.compact) tbody td:nth-child(3)::before {
-    content: "ROOM";
+    content: attr(data-label);
   }
 
   .reservation-table:not(.compact) tbody td:nth-child(4)::before {
-    content: "CHECK-IN / CHECK-OUT";
+    content: attr(data-label);
   }
 
   .reservation-table:not(.compact) tbody td:nth-child(5)::before {
-    content: "LENGTH OF STAY";
+    content: attr(data-label);
   }
 
   .reservation-table:not(.compact) tbody td:nth-child(6)::before {
-    content: "STATUS";
+    content: attr(data-label);
   }
 
   .reservation-table:not(.compact) tbody td:nth-child(7)::before {

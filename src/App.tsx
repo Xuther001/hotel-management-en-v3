@@ -480,6 +480,7 @@ function formatLengthOfStay(checkIn: string, checkOut: string): string {
 }
 
 function ReservationTable({ rows, compact = false, onStatusChange, onDelete, onEdit }: { rows: AnyRow[]; compact?: boolean; onStatusChange?: (id: string, status: string) => void; onDelete?: (id: string, guest: string) => void; onEdit?: (row: AnyRow) => void }) {
+  const isVietnamese = useLanguage() === "vi";
   if (!rows.length) return <EmptyState title="No reservations found" text="Try changing your search or add a reservation."/>;
   const statuses = ['Confirmed', 'Arriving today', 'Checked in', 'Checked out', 'Cancelled', 'No-show'];
   const now = new Date();
@@ -490,7 +491,7 @@ function ReservationTable({ rows, compact = false, onStatusChange, onDelete, onE
     <tbody>{rows.map(r => {
       const expired = r.checkOut < today;
       return <tr key={r.id}>
-        <td>
+        <td data-label={isVietnamese ? "KHÁCH" : "GUEST"}>
           <strong>{r.guest}</strong>
           <span className="cell-sub">{r.id} · {r.source}</span>
           {String(r.note || '').trim() && <div className="reservation-note-content">
@@ -498,16 +499,16 @@ function ReservationTable({ rows, compact = false, onStatusChange, onDelete, onE
             {String(r.note).trim()}
           </div>}
         </td>
-        <td>{r.propertyId === 'hotel-a' ? 'Hotel A' : r.propertyId === 'hotel-b' ? 'Hotel B' : (r.property || 'Unknown hotel')}</td>
-        <td>{r.room}</td>
-        <td><span>{r.checkIn}</span><span className="cell-sub">to {r.checkOut}</span></td>
-        <td>{formatLengthOfStay(r.checkIn, r.checkOut)}</td>
-        <td>{!compact && onStatusChange && !expired
+        <td data-label={isVietnamese ? "KHÁCH SẠN" : "HOTEL"}>{r.propertyId === "hotel-a" ? "Hotel A" : r.propertyId === "hotel-b" ? "Hotel B" : (r.property || "Unknown hotel")}</td>
+        <td data-label={isVietnamese ? "PHÒNG" : "ROOM"}>{r.room}</td>
+        <td data-label={isVietnamese ? "NGÀY NHẬN / TRẢ PHÒNG" : "CHECK-IN / CHECK-OUT"}><span>{r.checkIn}</span><span className="cell-sub">{isVietnamese ? "đến" : "to"} {r.checkOut}</span></td>
+        <td data-label={isVietnamese ? "THỜI LƯỢNG LƯU TRÚ" : "LENGTH OF STAY"}>{formatLengthOfStay(r.checkIn, r.checkOut)}</td>
+        <td data-label={isVietnamese ? "TRẠNG THÁI" : "STATUS"}>{!compact && onStatusChange && !expired
           ? <select aria-label={`Status for ${r.guest}`} value={statuses.includes(r.status) ? r.status : 'Confirmed'} onChange={e => onStatusChange(r.id, e.target.value)}>{statuses.map(status => <option key={status} value={status}>{status}</option>)}</select>
           : <><Badge tone={r.status === 'Checked in' ? 'success' : r.status === 'Arriving today' ? 'info' : 'neutral'}>{r.status}</Badge>{!compact && expired && <span className="cell-sub">Status locked: stay has ended</span>}</>}
         </td>
 
-        {!compact && (onDelete || onEdit) && <td>
+        {!compact && (onDelete || onEdit) && <td data-label={isVietnamese ? "THAO TÁC" : "ACTIONS"}>
           {onEdit && !expired && !['checked out', 'cancelled', 'canceled', 'no-show', 'no show'].includes(String(r.status || '').toLowerCase()) &&
             <button type="button" className="reservation-edit-btn" onClick={() => onEdit(r)}>Edit</button>}
           {onDelete && <button type="button" className="reservation-delete-btn" onClick={() => onDelete(r.id, r.guest)}>Delete</button>}
