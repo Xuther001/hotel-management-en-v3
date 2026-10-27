@@ -254,7 +254,7 @@ function AuthenticatedApp({ user, onLogout }: { user: AuthUser; onLogout: () => 
         <Route path="/" element={<Dashboard property={property}/>} />
         <Route path="/reservations" element={<Reservations property={property} onReservationCountChange={refreshReservationCount} />} />
         <Route path="/reservation-calendar" element={<ReservationCalendar property={property} />} />
-        <Route path="/rooms" element={<Rooms property={property}/>} />
+        <Route path="/rooms" element={<Rooms property={property} isAdmin={user.role === 'Admin'}/>} />
         <Route path="/employees" element={<Employees />} />
         <Route path="/finance" element={<Navigate to="/finance/billing" replace />} />
         <Route path="/finance/billing" element={<Finance section="billing" />} />
@@ -1029,10 +1029,14 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
   return bytes;
 }
 
-function Rooms({ property }: { property: string }) {
+function Rooms({ property, isAdmin }: { property: string; isAdmin: boolean }) {
   const [rows, setRows] = useState<AnyRow[]>([]);
   const [reservations, setReservations] = useState<AnyRow[]>([]);
+  const [roomProperties, setRoomProperties] = useState<AnyRow[]>([]);
   const [query, setQuery] = useState('');
+  const [addRoomOpen, setAddRoomOpen] = useState(false);
+  const [addRoomError, setAddRoomError] = useState('');
+  const [savingRoom, setSavingRoom] = useState(false);
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
   const [selectedNoteRoom, setSelectedNoteRoom] = useState<AnyRow | null>(null);
   const [selectedStatus, setSelectedStatus] = useState<{ title: string; field: 'occupancyStatus' | 'housekeepingStatus'; value: string } | null>(null);
@@ -1058,6 +1062,36 @@ function Rooms({ property }: { property: string }) {
   }).catch(() => {});
 
   useEffect(() => { load(); }, [query, property]);
+
+  useEffect(() => {
+    api.properties().then(result => setRoomProperties(result.data || [])).catch(() => {});
+  }, []);
+
+  async function createRoom(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (savingRoom) return;
+
+    const values = new FormData(e.currentTarget);
+    const payload = {
+      propertyId: String(values.get('propertyId') || ''),
+      number: String(values.get('number') || '').trim(),
+      type: String(values.get('type') || '').trim(),
+      floor: String(values.get('floor') || '').trim()
+    };
+
+    setSavingRoom(true);
+    setAddRoomError('');
+    try {
+      await api.createRoom(payload);
+      setAddRoomOpen(false);
+      setQuery('');
+      await load();
+    } catch (error) {
+      setAddRoomError(error instanceof Error ? error.message : 'Could not create room.');
+    } finally {
+      setSavingRoom(false);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -1220,7 +1254,7 @@ function Rooms({ property }: { property: string }) {
   }), [rows]);
 
   return <>
-    <PageHeader eyebrow="HOTEL OPERATIONS" title="Room management" description="View room availability, update operational status, and maintain room notes." actions={<><Button variant="secondary" onClick={load}><RefreshCw size={15}/> Refresh</Button><Button variant={pushEnabled ? "secondary" : "primary"} onClick={() => { if (!pushBusy) void (pushEnabled ? disableNotifications() : enableNotifications()); }}><Bell size={15}/> {pushBusy ? "Please wait…" : pushEnabled ? "Notifications Enabled" : "Enable Notifications"}</Button></>}/>
+    <PageHeader eyebrow="HOTEL OPERATIONS" title="Room management" description="View room availability, update operational status, and maintain room notes." actions={<>{isAdmin && <Button onClick={() => { setAddRoomOpen(true); setAddRoomError(''); }}><Plus size={15}/> Add room</Button>}<Button variant="secondary" onClick={load}><RefreshCw size={15}/> Refresh</Button><Button variant={pushEnabled ? "secondary" : "primary"} onClick={() => { if (!pushBusy) void (pushEnabled ? disableNotifications() : enableNotifications()); }}><Bell size={15}/> {pushBusy ? "Please wait…" : pushEnabled ? "Notifications Enabled" : "Enable Notifications"}</Button></>}/>
     <div className="mini-stat-grid room-status-summary">
       {([
         { title: 'Vacant', value: counts.vacant, field: 'occupancyStatus', status: 'Vacant' },
@@ -1384,6 +1418,56 @@ function Rooms({ property }: { property: string }) {
           </Button>
         </div>
       </div>
+    </Modal>}
+    {addRoomOpen && isAdmin && <Modal
+      title="Add room"
+      onClose={() => {
+        if (!savingRoom) {
+          setAddRoomOpen(false);
+          setAddRoomError('');
+        }
+      }}
+    >
+      <form className="form-grid" onSubmit={createRoom}>
+        <label className="span-2">
+          Hotel
+          <select
+            name="propertyId"
+            required
+            defaultValue={property !== 'all' ? property : (roomProperties[0]?.id || '')}
+          >
+            <option value="" disabled>Select a hotel</option>
+            {roomProperties.map(item => (
+              <option key={item.id} value={item.id}>{item.name}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Room number
+          <input name="number" required maxLength={30} placeholder="e.g. 107" />
+        </label>
+        <label>
+          Floor
+          <input name="floor" required maxLength={20} placeholder="e.g. 1 or G" />
+        </label>
+        <label className="span-2">
+          Room type
+          <input name="type" required maxLength={100} defaultValue="Standard Room" placeholder="e.g. Standard Room" />
+        </label>
+        <p className="muted span-2">
+          New rooms start as Vacant and Clean. Room numbers must be unique within the selected hotel.
+        </p>
+        {addRoomError && <p className="span-2" role="alert">{addRoomError}</p>}
+        <div className="form-actions span-2">
+          <Button variant="secondary" disabled={savingRoom} onClick={() => {
+            setAddRoomOpen(false);
+            setAddRoomError('');
+          }}>Cancel</Button>
+          <Button type="submit" disabled={savingRoom}>
+            {savingRoom ? 'Saving…' : 'Create room'}
+          </Button>
+        </div>
+      </form>
     </Modal>}
   </>;
 }

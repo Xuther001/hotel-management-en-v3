@@ -1406,6 +1406,68 @@ app.post('/api/v1/push/unsubscribe', (req, res) => {
   }
 });
 
+app.post('/api/v1/rooms', requireAdmin, (req, res) => {
+  const d = readData();
+  const propertyId = String(req.body?.propertyId || '').trim();
+  const number = String(req.body?.number || '').trim();
+  const type = String(req.body?.type || '').trim();
+  const floor = String(req.body?.floor || '').trim();
+
+  if (!propertyId || !number || !type || !floor) {
+    return res.status(400).json({ error: 'Hotel, room number, room type, and floor are required.' });
+  }
+  if (number.length > 30 || type.length > 100 || floor.length > 20) {
+    return res.status(400).json({ error: 'Room number, type, or floor is too long.' });
+  }
+
+  const property = (d.properties || []).find((p: AnyRecord) => p.id === propertyId);
+  if (!property) {
+    return res.status(400).json({ error: 'Select a valid hotel.' });
+  }
+
+  const rooms = Array.isArray(d.rooms) ? d.rooms : [];
+  if (rooms.some((room: AnyRecord) =>
+    room.propertyId === propertyId &&
+    String(room.number || '').trim().toLowerCase() === number.toLowerCase()
+  )) {
+    return res.status(409).json({ error: `Room ${number} already exists at ${property.name}.` });
+  }
+
+  const prefix = propertyId === 'hotel-a' ? 'A'
+    : propertyId === 'hotel-b' ? 'B'
+    : String(propertyId).toUpperCase();
+  const baseId = `${prefix}-${number}`;
+  const id = rooms.some((room: AnyRecord) => room.id === baseId)
+    ? `${baseId}-${Date.now()}`
+    : baseId;
+
+  const room = {
+    id,
+    number,
+    type,
+    propertyId,
+    floor,
+    note: '',
+    occupancyStatus: 'Vacant',
+    housekeepingStatus: 'Clean'
+  };
+
+  d.rooms = rooms;
+  d.rooms.push(room);
+
+  addActivity(d, `Room ${number} created`, [
+    { field: 'Hotel', from: '(new)', to: property.name },
+    { field: 'Room number', from: '(new)', to: number },
+    { field: 'Room type', from: '(new)', to: type },
+    { field: 'Floor', from: '(new)', to: floor },
+    { field: 'Occupancy', from: '(new)', to: 'Vacant' },
+    { field: 'Housekeeping', from: '(new)', to: 'Clean' }
+  ], activityActor(req));
+
+  writeData(d);
+  res.status(201).json({ data: room });
+});
+
 app.get('/api/v1/rooms', (req, res) => res.json(list(readData().rooms, req)));
 app.patch('/api/v1/rooms/:id/status', async (req, res) => {
   const d = readData();
