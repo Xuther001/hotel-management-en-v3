@@ -3,6 +3,17 @@ import { api } from './api';
 
 type Language = 'en' | 'vi';
 const translations: Record<string, string> = {
+  "BUSINESS INTELLIGENCE": "PHÂN TÍCH KINH DOANH",
+  "Explore the performance indicators used in the owner dashboard.": "Theo dõi các chỉ số hiệu quả hoạt động trên bảng điều khiển dành cho chủ khách sạn.",
+  "sample month": "tháng minh họa",
+  "illustrative estimate": "ước tính minh họa",
+  "selected properties": "khách sạn đã chọn",
+  "Staff": "Nhân sự",
+  "group-wide sample": "số liệu minh họa toàn hệ thống",
+  "Revenue comparison": "So sánh doanh thu",
+  "VND millions · sample values": "Triệu đồng · số liệu minh họa",
+  "Reporting note": "Lưu ý về báo cáo",
+  "Operating profit is a demonstration estimate, not a formal accounting calculation. Connect verified transactions and accounting rules before relying on reports.": "Lợi nhuận hoạt động chỉ là số liệu ước tính minh họa, không phải kết quả kế toán chính thức. Hãy kết nối dữ liệu giao dịch đã xác minh và các nguyên tắc kế toán trước khi sử dụng báo cáo làm căn cứ ra quyết định.",
   "Dashboard": "Tổng quan",
   "FINANCE": "TÀI CHÍNH",
   "Manage guest charges, installment schedules, recorded payments, and operating expenses.": "Quản lý các khoản thu của khách, lịch thanh toán theo đợt, các khoản thanh toán đã ghi nhận và chi phí hoạt động.",

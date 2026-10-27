@@ -1701,7 +1701,24 @@ function Maintenance() {
 }
 function Reports({property}:{property:string}) {
   const [data,setData]=useState<AnyRow|null>(null);useEffect(()=>{api.overview(property).then(r=>setData(r.data));},[property]);
-  return <><PageHeader eyebrow="BUSINESS INTELLIGENCE" title="Reports & analytics" description="Explore the performance indicators used in the owner dashboard." actions={<Button variant="secondary" onClick={()=>window.print()}><FileText size={16}/> Print report</Button>}/><div className="stat-grid"><StatCard title="Revenue" value={money(data?.revenue||0)} icon={<CircleDollarSign size={19}/>} note="sample month"/><StatCard title="Operating profit" value={money(data?.operatingProfit||0)} icon={<ChartNoAxesCombined size={19}/>} note="illustrative estimate"/><StatCard title="Occupancy" value={`${data?.occupancy||0}%`} icon={<BedDouble size={19}/>} note="selected properties"/><StatCard title="Staff" value={String(data?.employeeCount||0)} icon={<Users size={19}/>} note="group-wide sample"/></div><Panel title="Revenue comparison" subtitle="VND millions · sample values"><div className="chart-wrap tall"><ResponsiveContainer width="100%" height="100%"><BarChart data={data?.revenueTrend||[]} margin={{top:12,right:10,left:0,bottom:0}}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#edf0f5"/><XAxis dataKey="month" tickLine={false} axisLine={false}/><YAxis tickLine={false} axisLine={false}/><Tooltip/><Bar dataKey="hotelA" name="Hotel A" fill="#4779ed" radius={[5,5,0,0]}/><Bar dataKey="hotelB" name="Hotel B" fill="#25b99a" radius={[5,5,0,0]}/></BarChart></ResponsiveContainer></div></Panel><div className="notice"><AlertTriangle size={17}/><div><strong>Reporting note</strong><span>Operating profit is a demonstration estimate, not a formal accounting calculation. Connect verified transactions and accounting rules before relying on reports.</span></div></div></>;
+  return <><PageHeader eyebrow="BUSINESS INTELLIGENCE" title="Reports & analytics" description="Explore the performance indicators used in the owner dashboard." actions={<Button variant="secondary" onClick={()=>window.print()}><FileText size={16}/> Print report</Button>}/><div className="stat-grid"><StatCard title="Revenue" value={money(data?.revenue||0)} icon={<CircleDollarSign size={19}/>} note="sample month"/><StatCard title="Operating profit" value={money(data?.operatingProfit||0)} icon={<ChartNoAxesCombined size={19}/>} note="illustrative estimate"/><StatCard title="Occupancy" value={`${data?.occupancy||0}%`} icon={<BedDouble size={19}/>} note="selected properties"/><StatCard title="Staff" value={String(data?.employeeCount||0)} icon={<Users size={19}/>} note="group-wide sample"/></div><Panel title="Revenue comparison" subtitle="VND millions · sample values"><div className="chart-wrap tall"><ResponsiveContainer width="100%" height="100%"><BarChart data={(data?.revenueTrend || []).map((item: AnyRow) => {
+  if (!document.documentElement.lang.toLowerCase().startsWith('vi')) return item;
+  const months: Record<string, string> = {
+    Jan: 'Tháng 1', January: 'Tháng 1',
+    Feb: 'Tháng 2', February: 'Tháng 2',
+    Mar: 'Tháng 3', March: 'Tháng 3',
+    Apr: 'Tháng 4', April: 'Tháng 4',
+    May: 'Tháng 5',
+    Jun: 'Tháng 6', June: 'Tháng 6',
+    Jul: 'Tháng 7', July: 'Tháng 7',
+    Aug: 'Tháng 8', August: 'Tháng 8',
+    Sep: 'Tháng 9', September: 'Tháng 9',
+    Oct: 'Tháng 10', October: 'Tháng 10',
+    Nov: 'Tháng 11', November: 'Tháng 11',
+    Dec: 'Tháng 12', December: 'Tháng 12'
+  };
+  return { ...item, month: months[item.month] || item.month };
+})} margin={{top:12,right:10,left:0,bottom:0}}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#edf0f5"/><XAxis dataKey="month" tickLine={false} axisLine={false}/><YAxis tickLine={false} axisLine={false}/><Tooltip/><Bar dataKey="hotelA" name="Hotel A" fill="#4779ed" radius={[5,5,0,0]}/><Bar dataKey="hotelB" name="Hotel B" fill="#25b99a" radius={[5,5,0,0]}/></BarChart></ResponsiveContainer></div></Panel><div className="notice"><AlertTriangle size={17}/><div><strong>Reporting note</strong><span>Operating profit is a demonstration estimate, not a formal accounting calculation. Connect verified transactions and accounting rules before relying on reports.</span></div></div></>;
 }
 function SettingsPage() {
   const [selectedSection, setSelectedSection] = useState('');
