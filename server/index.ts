@@ -1132,7 +1132,14 @@ app.post('/api/v1/reservations', (req, res) => {
     });
   }
 
-  const id = `RES-${1053 + d.reservations.length}`;
+  const usedIds = new Set((d.reservations || []).map((r: AnyRecord) => String(r.id || "")));
+  const maxReservationNumber = (d.reservations || []).reduce((max: number, r: AnyRecord) => {
+    const match = /^RES-(\d+)$/.exec(String(r.id || ""));
+    return match ? Math.max(max, Number(match[1])) : max;
+  }, 1052);
+  let nextReservationNumber = maxReservationNumber + 1;
+  while (usedIds.has(`RES-${nextReservationNumber}`)) nextReservationNumber++;
+  const id = `RES-${nextReservationNumber}`;
   const item = {
     id,
     guest: String(body.guest).trim(),
