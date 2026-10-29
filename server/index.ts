@@ -1576,6 +1576,21 @@ app.post('/api/v1/finance/expenses', (req, res) => {
   res.status(201).json({ data: item });
 });
 
+// Match a payment date to the anniversary-based installment it belongs to.
+// Payments after checkout map to the final installment so outstanding balances
+// can still be settled. Dates before check-in have no matching installment.
+function monthlyInstallmentForPayment(
+  installments: AnyRecord[],
+  paymentDate: string
+): AnyRecord | null {
+  const eligible = installments
+    .filter((item: AnyRecord) => String(item.dueDate || '') <= paymentDate)
+    .sort((a: AnyRecord, b: AnyRecord) =>
+      String(a.dueDate || '').localeCompare(String(b.dueDate || ''))
+    );
+  return eligible.length ? eligible[eligible.length - 1] : null;
+}
+
 function getBillingRows(d: AnyRecord) {
   // Use the hotel's local date and clock, regardless of the API computer's timezone.
   const now = new Date();
@@ -1720,9 +1735,24 @@ function getBillingRows(d: AnyRecord) {
         return now.getTime() > new Date(deadline).getTime();
       };
 
-      // Apply each recorded payment to the oldest outstanding installment first.
+      // Monthly payments belong to the anniversary-based period selected by
+      // the payment date. Daily billing keeps its original oldest-first logic.
       for (const payment of reservationPayments) {
         let remaining = Math.max(0, Number(payment.amount || 0));
+
+        if (rentalType === 'Monthly') {
+          const installment = monthlyInstallmentForPayment(
+            installments,
+            String(payment.date || '')
+          );
+          if (!installment) continue;
+
+          const applied = Math.min(installment.balance, remaining);
+          installment.paid += applied;
+          installment.balance -= applied;
+          continue;
+        }
+
         for (const installment of installments) {
           if (remaining <= 0) break;
           const applied = Math.min(installment.balance, remaining);
@@ -1856,9 +1886,50 @@ app.post('/api/v1/billing/payments', (req, res) => {
   const amount = Number(req.body.amount);
   if (!Number.isFinite(amount) || amount <= 0)
     return res.status(400).json({ error: 'Payment amount must be greater than zero.' });
+
+  const paymentDate = String(req.body.date || new Date().toISOString().slice(0, 10));
+  const billingRow = getBillingRows(d).find(
+    (row: AnyRecord) => row.reservationId === reservationId
+  );
+
+  if (billingRow?.rentalType === 'Monthly') {
+    const parsedDate = new Date(`${paymentDate}T00:00:00.000Z`);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(paymentDate)
+        || Number.isNaN(parsedDate.getTime())
+        || parsedDate.toISOString().slice(0, 10) !== paymentDate)
+      return res.status(400).json({ error: 'Enter a valid payment date.' });
+
+    const installment = monthlyInstallmentForPayment(
+      billingRow.installments || [], paymentDate
+    );
+    if (!installment)
+      return res.status(400).json({
+        error: 'A Monthly payment date cannot be before the reservation check-in date.'
+      });
+
+    const duplicate = (Array.isArray(d.payments) ? d.payments : []).some(
+      (existing: AnyRecord) => {
+        if (existing.reservationId !== reservationId) return false;
+        const existingInstallment = monthlyInstallmentForPayment(
+          billingRow.installments || [], String(existing.date || '')
+        );
+        return existingInstallment?.dueDate === installment.dueDate;
+      }
+    );
+    if (duplicate)
+      return res.status(400).json({
+        error: `A payment already exists for the Monthly billing period starting ${installment.dueDate}. Edit that payment to change its amount.`
+      });
+
+    if (Math.round(amount) > Number(installment.charge || 0))
+      return res.status(400).json({
+        error: `Payment cannot exceed this billing period's charge of ${Number(installment.charge || 0).toLocaleString('en-US')} VND.`
+      });
+  }
+
   if (!Array.isArray(d.payments)) d.payments = [];
   const payment = { id: `PAY-${Date.now()}`, reservationId,
-    date: req.body.date || new Date().toISOString().slice(0, 10),
+    date: paymentDate,
     amount: Math.round(amount), method: String(req.body.method || 'Cash'),
     notes: String(req.body.notes || '').slice(0, 500) };
   d.payments.unshift(payment);
@@ -1896,6 +1967,40 @@ app.patch('/api/v1/billing/payments/:paymentId', (req, res) => {
 
   if (!method || method.length > 80)
     return res.status(400).json({ error: 'Enter a valid payment method.' });
+
+  const billingRow = getBillingRows(d).find(
+    (row: AnyRecord) => row.reservationId === payment.reservationId
+  );
+
+  if (billingRow?.rentalType === 'Monthly') {
+    const installment = monthlyInstallmentForPayment(
+      billingRow.installments || [], date
+    );
+    if (!installment)
+      return res.status(400).json({
+        error: 'A Monthly payment date cannot be before the reservation check-in date.'
+      });
+
+    const duplicate = (Array.isArray(d.payments) ? d.payments : []).some(
+      (existing: AnyRecord) => {
+        if (existing.id === payment.id
+            || existing.reservationId !== payment.reservationId) return false;
+        const existingInstallment = monthlyInstallmentForPayment(
+          billingRow.installments || [], String(existing.date || '')
+        );
+        return existingInstallment?.dueDate === installment.dueDate;
+      }
+    );
+    if (duplicate)
+      return res.status(400).json({
+        error: `Another payment already exists for the Monthly billing period starting ${installment.dueDate}. Choose a different date or edit the other payment.`
+      });
+
+    if (Math.round(amount) > Number(installment.charge || 0))
+      return res.status(400).json({
+        error: `Payment cannot exceed this billing period's charge of ${Number(installment.charge || 0).toLocaleString('en-US')} VND.`
+      });
+  }
 
   const before = {
     amount: payment.amount,
