@@ -1702,11 +1702,17 @@ function getBillingRows(d: AnyRecord) {
       const reservationPayments = payments
         .filter((x: AnyRecord) => x.reservationId === r.id)
         .sort((a: AnyRecord, b: AnyRecord) =>
-          String(a.date || '').localeCompare(String(b.date || ''))
+          String(a.effectiveDate || a.date || '').localeCompare(
+            String(b.effectiveDate || b.date || '')
+          )
         );
 
+      // A payment reduces today's balance only on or after its effective date.
       const paid = reservationPayments.reduce(
-        (sum: number, x: AnyRecord) => sum + Math.max(0, Number(x.amount || 0)),
+        (sum: number, x: AnyRecord) =>
+          String(x.effectiveDate || x.date || '') <= today
+            ? sum + Math.max(0, Number(x.amount || 0))
+            : sum,
         0
       );
 
@@ -1735,15 +1741,18 @@ function getBillingRows(d: AnyRecord) {
         return now.getTime() > new Date(deadline).getTime();
       };
 
-      // Monthly payments belong to the anniversary-based period selected by
-      // the payment date. Daily billing keeps its original oldest-first logic.
+      // Effective date controls when a payment reduces balances and which
+      // anniversary-based Monthly installment receives it.
       for (const payment of reservationPayments) {
+        const effectiveDate = String(payment.effectiveDate || payment.date || '');
+        if (effectiveDate > today) continue;
+
         let remaining = Math.max(0, Number(payment.amount || 0));
 
         if (rentalType === 'Monthly') {
           const installment = monthlyInstallmentForPayment(
             installments,
-            String(payment.date || '')
+            effectiveDate
           );
           if (!installment) continue;
 
@@ -1888,6 +1897,22 @@ app.post('/api/v1/billing/payments', (req, res) => {
     return res.status(400).json({ error: 'Payment amount must be greater than zero.' });
 
   const paymentDate = String(req.body.date || new Date().toISOString().slice(0, 10));
+  const effectiveDate = String(req.body.effectiveDate || paymentDate);
+  const validISODate = (value: string) => {
+    const parsed = new Date(`${value}T00:00:00.000Z`);
+    return /^\d{4}-\d{2}-\d{2}$/.test(value)
+      && !Number.isNaN(parsed.getTime())
+      && parsed.toISOString().slice(0, 10) === value;
+  };
+  if (!validISODate(paymentDate))
+    return res.status(400).json({ error: 'Enter a valid payment date.' });
+  if (!validISODate(effectiveDate))
+    return res.status(400).json({ error: 'Enter a valid effective date.' });
+  if (effectiveDate < paymentDate)
+    return res.status(400).json({
+      error: 'The effective date cannot be before the payment receipt date.'
+    });
+
   const billingRow = getBillingRows(d).find(
     (row: AnyRecord) => row.reservationId === reservationId
   );
@@ -1900,7 +1925,7 @@ app.post('/api/v1/billing/payments', (req, res) => {
       return res.status(400).json({ error: 'Enter a valid payment date.' });
 
     const installment = monthlyInstallmentForPayment(
-      billingRow.installments || [], paymentDate
+      billingRow.installments || [], effectiveDate
     );
     if (!installment)
       return res.status(400).json({
@@ -1911,7 +1936,8 @@ app.post('/api/v1/billing/payments', (req, res) => {
       (existing: AnyRecord) => {
         if (existing.reservationId !== reservationId) return false;
         const existingInstallment = monthlyInstallmentForPayment(
-          billingRow.installments || [], String(existing.date || '')
+          billingRow.installments || [],
+          String(existing.effectiveDate || existing.date || '')
         );
         return existingInstallment?.dueDate === installment.dueDate;
       }
@@ -1929,7 +1955,7 @@ app.post('/api/v1/billing/payments', (req, res) => {
 
   if (!Array.isArray(d.payments)) d.payments = [];
   const payment = { id: `PAY-${Date.now()}`, reservationId,
-    date: paymentDate,
+    date: paymentDate, effectiveDate,
     amount: Math.round(amount), method: String(req.body.method || 'Cash'),
     notes: String(req.body.notes || '').slice(0, 500) };
   d.payments.unshift(payment);
@@ -1954,6 +1980,7 @@ app.patch('/api/v1/billing/payments/:paymentId', (req, res) => {
 
   const amount = Number(req.body.amount);
   const date = String(req.body.date || '');
+  const effectiveDate = String(req.body.effectiveDate || date);
   const method = String(req.body.method || '').trim();
 
   if (!Number.isFinite(amount) || amount <= 0)
@@ -1965,6 +1992,16 @@ app.patch('/api/v1/billing/payments/:paymentId', (req, res) => {
       || parsedDate.toISOString().slice(0, 10) !== date)
     return res.status(400).json({ error: 'Enter a valid payment date.' });
 
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveDate)
+      || Number.isNaN(new Date(`${effectiveDate}T00:00:00.000Z`).getTime())
+      || new Date(`${effectiveDate}T00:00:00.000Z`).toISOString().slice(0, 10) !== effectiveDate)
+    return res.status(400).json({ error: 'Enter a valid effective date.' });
+
+  if (effectiveDate < date)
+    return res.status(400).json({
+      error: 'The effective date cannot be before the payment receipt date.'
+    });
+
   if (!method || method.length > 80)
     return res.status(400).json({ error: 'Enter a valid payment method.' });
 
@@ -1974,7 +2011,7 @@ app.patch('/api/v1/billing/payments/:paymentId', (req, res) => {
 
   if (billingRow?.rentalType === 'Monthly') {
     const installment = monthlyInstallmentForPayment(
-      billingRow.installments || [], date
+      billingRow.installments || [], effectiveDate
     );
     if (!installment)
       return res.status(400).json({
@@ -1986,7 +2023,8 @@ app.patch('/api/v1/billing/payments/:paymentId', (req, res) => {
         if (existing.id === payment.id
             || existing.reservationId !== payment.reservationId) return false;
         const existingInstallment = monthlyInstallmentForPayment(
-          billingRow.installments || [], String(existing.date || '')
+          billingRow.installments || [],
+          String(existing.effectiveDate || existing.date || '')
         );
         return existingInstallment?.dueDate === installment.dueDate;
       }
@@ -2005,19 +2043,21 @@ app.patch('/api/v1/billing/payments/:paymentId', (req, res) => {
   const before = {
     amount: payment.amount,
     date: payment.date,
+    effectiveDate: payment.effectiveDate || payment.date,
     method: payment.method,
     notes: payment.notes || ''
   };
 
   payment.amount = Math.round(amount);
   payment.date = date;
+  payment.effectiveDate = effectiveDate;
   payment.method = method;
   payment.notes = String(req.body.notes ?? payment.notes ?? '').slice(0, 500);
 
   if (!Array.isArray(d.activity)) d.activity = [];
   d.activity.unshift({
     id: Date.now(),
-    text: `Payment ${payment.id} edited for ${payment.reservationId}: amount ${before.amount} -> ${payment.amount}; date ${before.date} -> ${payment.date}; method ${before.method} -> ${payment.method}`,
+    text: `Payment ${payment.id} edited for ${payment.reservationId}: amount ${before.amount} -> ${payment.amount}; receipt date ${before.date} -> ${payment.date}; effective date ${before.effectiveDate} -> ${effectiveDate}; method ${before.method} -> ${payment.method}`,
     by: activityActor(req),
     time: new Date().toISOString().slice(11, 16),
     timestamp: new Date().toISOString()
@@ -2027,7 +2067,8 @@ app.patch('/api/v1/billing/payments/:paymentId', (req, res) => {
   void notifyOtherUsers(req, 'Payment updated',
     `Reservation ${payment.reservationId} · ${notificationChangeSummary([
       { field: 'Amount', from: before.amount.toLocaleString('en-US') + ' VND', to: payment.amount.toLocaleString('en-US') + ' VND' },
-      { field: 'Date', from: before.date, to: payment.date },
+      { field: 'Receipt date', from: before.date, to: payment.date },
+      { field: 'Effective date', from: before.effectiveDate, to: effectiveDate },
       { field: 'Method', from: before.method, to: payment.method }
     ])} · By: ${activityActor(req)}`, '/finance/payments')
     .catch(error => console.error('Could not dispatch payment notification:', error));
