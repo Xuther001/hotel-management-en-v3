@@ -1747,7 +1747,7 @@ function Finance({section = 'billing'}: {section?: 'billing'|'installments'|'pay
   const [configRentalType,setConfigRentalType] = useState<'Daily'|'Monthly'>('Daily');
   const [selectedPayment,setSelectedPayment] = useState<AnyRow|null>(null);
   const [error,setError] = useState('');
-  const [period,setPeriod] = useState('all');
+  const [period,setPeriod] = useState(() => new Date().toISOString().slice(0,7));
   const today = new Date().toISOString().slice(0,10);
   const monthOptions = Array.from({length:36},(_,index)=>{
     const date = new Date();
@@ -1945,7 +1945,8 @@ function Finance({section = 'billing'}: {section?: 'billing'|'installments'|'pay
       return graceEnd<=cutoffDate ? sum+Number(i.balance) : sum;
     },0);
     const paid = Math.max(0,charge-balance);
-    const status = charge<=0 ? 'Setup needed'
+    const status = charge<=0
+      ? (Number(r.charge || 0) > 0 ? 'Upcoming' : 'Setup needed')
       : balance<=0 ? 'Paid'
       : overdueAmount>0 ? 'Overdue' : 'Due';
     return {
