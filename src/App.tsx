@@ -1986,15 +1986,15 @@ function Finance({section = 'billing'}: {section?: 'billing'|'installments'|'pay
       .map((i:any)=>({...i,reservationId:r.reservationId,guest:r.guest,room:r.room}))
     : [])).sort((a,b)=>String(a.dueDate).localeCompare(String(b.dueDate)));
   return <>
-    <PageHeader eyebrow="FINANCE" title={section==='billing'?'Guest billing register':section==='installments'?'Monthly installment breakdown':section==='payments'?'Payment history':'Expenses'} description="Manage guest charges, installment schedules, recorded payments, and operating expenses." actions={section==='expenses'?<Button onClick={()=>setOpen(true)}><Plus size={16}/> Record expense</Button>:undefined}/>
+    <PageHeader eyebrow="FINANCE" title={isVietnamese?(section==='billing'?'Sổ công nợ khách':section==='installments'?'Chi tiết các đợt thanh toán hàng tháng':section==='payments'?'Lịch sử thanh toán':'Chi phí'):(section==='billing'?'Guest billing register':section==='installments'?'Monthly installment breakdown':section==='payments'?'Payment history':'Expenses')} description={isVietnamese?"Quản lý các khoản phải thu của khách, lịch thanh toán theo đợt, các khoản đã thu và chi phí hoạt động.":"Manage guest charges, installment schedules, recorded payments, and operating expenses."} actions={section==='expenses'?<Button onClick={()=>setOpen(true)}><Plus size={16}/> Record expense</Button>:undefined}/>
     <div className="toolbar finance-period-toolbar">
-      <label>Reporting period
+      <label>{isVietnamese?"Kỳ báo cáo":"Reporting period"}
         <select value={period} onChange={e=>setPeriod(e.target.value)}>
-          <option value="all">All-time</option>
+          <option value="all">{isVietnamese?"Toàn bộ thời gian":"All-time"}</option>
           {monthOptions.map(m=><option key={m.value} value={m.value}>{m.label}</option>)}
         </select>
       </label>
-      {period!=='all'&&<span className="cell-sub">Figures through {cutoffDate}</span>}
+      {period!=='all'&&<span className="cell-sub">{isVietnamese?"Số liệu tính đến":"Figures through"} {cutoffDate}</span>}
     </div>
     {section==='expenses'?<>
       <div className="mini-stat-grid"><div><span>{period==='all'?'Total expenses':'Expenses this period'}</span><strong>{money(total)}</strong></div><div><span>Awaiting approval</span><strong>{expenseRows.filter(r=>r.status==='Pending').length}</strong></div><div><span>Approved</span><strong>{expenseRows.filter(r=>r.status==='Approved').length}</strong></div><div><span>Records</span><strong>{expenseRows.length}</strong></div></div>
@@ -2004,26 +2004,26 @@ function Finance({section = 'billing'}: {section?: 'billing'|'installments'|'pay
       {section==='billing' && <>
       {period === 'all' ? (
         <div className="mini-stat-grid">
-          <div><span>Guest charges</span><strong>{money(charges)}</strong></div>
-          <div><span>Payments recorded</span><strong>{money(paid)}</strong></div>
-          <div><span>Outstanding balance</span><strong>{money(balance)}</strong></div>
-                <div><span>Overdue amount</span><strong>{money(overdueAmount)}</strong></div>
-          <div><span>Overdue accounts</span><strong>{historicalBills.filter(r=>r.overdueAmount>0).length}</strong></div>
+          <div><span>{isVietnamese?"Các khoản phải thu":"Guest charges"}</span><strong>{money(charges)}</strong></div>
+          <div><span>{isVietnamese?"Các khoản đã thanh toán":"Payments recorded"}</span><strong>{money(paid)}</strong></div>
+          <div><span>{isVietnamese?"Công nợ còn lại":"Outstanding balance"}</span><strong>{money(balance)}</strong></div>
+                <div><span>{isVietnamese?"Số tiền quá hạn":"Overdue amount"}</span><strong>{money(overdueAmount)}</strong></div>
+          <div><span>{isVietnamese?"Số tài khoản quá hạn":"Overdue accounts"}</span><strong>{historicalBills.filter(r=>r.overdueAmount>0).length}</strong></div>
         </div>
       ) : (
         <div className="mini-stat-grid">
-          <div><span>Charges due this period</span><strong>{money(charges)}</strong></div>
-          <div><span>Payments recorded this period</span><strong>{money(paid)}</strong></div>
-          <div><span>Future-effective payments</span><strong>{money(advancedPayments.reduce((sum,p)=>sum+Number(p.amount||0),0))}</strong></div>
-          <div><span>Outstanding at period end</span><strong>{money(balance)}</strong></div>
-          <div><span>Overdue amount at cutoff</span><strong>{money(overdueAmount)}</strong></div>
-          <div><span>Overdue accounts</span><strong>{historicalBills.filter(r=>r.overdueAmount>0).length}</strong></div>
+          <div><span>{isVietnamese?"Các khoản phải thu trong kỳ":"Charges due this period"}</span><strong>{money(charges)}</strong></div>
+          <div><span>{isVietnamese?"Các khoản thanh toán đã ghi nhận trong kỳ":"Payments recorded this period"}</span><strong>{money(paid)}</strong></div>
+          <div><span>{isVietnamese?"Các khoản thanh toán có hiệu lực trong tương lai":"Future-effective payments"}</span><strong>{money(advancedPayments.reduce((sum,p)=>sum+Number(p.amount||0),0))}</strong></div>
+          <div><span>{isVietnamese?"Công nợ cuối kỳ":"Outstanding at period end"}</span><strong>{money(balance)}</strong></div>
+          <div><span>{isVietnamese?"Công nợ quá hạn tại thời điểm chốt":"Overdue amount at cutoff"}</span><strong>{money(overdueAmount)}</strong></div>
+          <div><span>{isVietnamese?"Số tài khoản quá hạn":"Overdue accounts"}</span><strong>{historicalBills.filter(r=>r.overdueAmount>0).length}</strong></div>
         </div>
       )}
-      <Panel title="Advanced payment" subtitle="Payments received but scheduled to take effect in the future. These are excluded from payments recorded this period and from the current outstanding-balance calculation.">
+      <Panel title={isVietnamese?"Thanh toán có hiệu lực trong tương lai":"Advanced payment"} subtitle={isVietnamese?"Các khoản đã nhận tiền nhưng được lên lịch có hiệu lực trong tương lai. Những khoản này chưa được tính vào thanh toán có hiệu lực hoặc công nợ hiện tại.":"Payments received but scheduled to take effect in the future. These are excluded from payments recorded this period and from the current outstanding-balance calculation."}>
         <div className="table-scroll">
           <table>
-            <thead><tr><th>RESERVATION / GUEST</th><th>ROOM</th><th>RECEIPT DATE</th><th>EFFECTIVE DATE</th><th>METHOD</th><th>AMOUNT</th></tr></thead>
+            <thead><tr><th>{isVietnamese?"ĐẶT PHÒNG / KHÁCH":"RESERVATION / GUEST"}</th><th>{isVietnamese?"PHÒNG":"ROOM"}</th><th>{isVietnamese?"NGÀY NHẬN TIỀN":"RECEIPT DATE"}</th><th>{isVietnamese?"NGÀY CÓ HIỆU LỰC":"EFFECTIVE DATE"}</th><th>{isVietnamese?"PHƯƠNG THỨC":"METHOD"}</th><th>{isVietnamese?"SỐ TIỀN":"AMOUNT"}</th></tr></thead>
             <tbody>
               {advancedPayments.map((p:any)=><tr key={p.id}>
                 <td><strong>{p.reservationId}</strong><span className="cell-sub">{p.guest}</span></td>
@@ -2033,12 +2033,12 @@ function Finance({section = 'billing'}: {section?: 'billing'|'installments'|'pay
                 <td>{p.method||'—'}</td>
                 <td className="amount-cell">{money(p.amount)}</td>
               </tr>)}
-              {!advancedPayments.length&&<tr><td colSpan={6}>No advanced payments scheduled for the future.</td></tr>}
+              {!advancedPayments.length&&<tr><td colSpan={6}>{isVietnamese?"Không có khoản thanh toán nào được lên lịch có hiệu lực trong tương lai.":"No advanced payments scheduled for the future."}</td></tr>}
             </tbody>
           </table>
         </div>
       </Panel>
-      <div className="notice"><AlertTriangle size={17}/><div><strong>Billing rules</strong><span>Daily stays are charged at the configured nightly rate multiplied by the number of nights, due on check-in. Monthly stays are prorated by actual calendar-month days and billed on each monthly check-in anniversary. Unpaid monthly bills have a grace period through noon on the fifth calendar day, Ho Chi Minh City time. Check-in night counts; checkout date does not. Existing reservations default to Daily, and no booking is assumed paid.</span></div></div>
+      <div className="notice"><AlertTriangle size={17}/><div><strong>{isVietnamese?"Quy định tính công nợ":"Billing rules"}</strong><span>{isVietnamese?"Lưu trú theo ngày được tính theo đơn giá mỗi đêm nhân với số đêm và đến hạn khi nhận phòng. Lưu trú theo tháng được phân bổ theo số ngày thực tế trong tháng và tính phí vào mỗi ngày kỷ niệm nhận phòng hàng tháng. Các khoản tháng chưa thanh toán được gia hạn đến 12 giờ trưa ngày 5 theo giờ TP. Hồ Chí Minh. Đêm nhận phòng được tính; ngày trả phòng không được tính. Đặt phòng hiện có mặc định theo ngày và không mặc định là đã thanh toán.":"Daily stays are charged at the configured nightly rate multiplied by the number of nights, due on check-in. Monthly stays are prorated by actual calendar-month days and billed on each monthly check-in anniversary. Unpaid monthly bills have a grace period through noon on the fifth calendar day, Ho Chi Minh City time. Check-in night counts; checkout date does not. Existing reservations default to Daily, and no booking is assumed paid."}</span></div></div>
       <div className="reservation-tabs billing-status-tabs" role="tablist" aria-label="Filter billing entries by status">
         {['Overdue', 'Due', 'Upcoming', 'Paid', 'Setup needed', 'All'].map(status => (
           <Button
@@ -2046,16 +2046,16 @@ function Finance({section = 'billing'}: {section?: 'billing'|'installments'|'pay
             variant={billingStatusFilter === status ? 'primary' : 'secondary'}
             onClick={() => setBillingStatusFilter(status)}
           >
-            {status}
+            {isVietnamese?({"Overdue":"Quá hạn","Due":"Đến hạn","Upcoming":"Sắp đến hạn","Paid":"Đã thanh toán","Setup needed":"Cần thiết lập","All":"Tất cả"} as Record<string,string>)[status]:status}
             <span className="billing-status-count">
               {status === 'All' ? historicalBills.length : historicalBills.filter(r => r.status === status).length}
             </span>
           </Button>
         ))}
       </div>
-      <Panel title="Guest billing register" subtitle="Billing settings and payments are stored separately from reservations."><div className="table-scroll billing-register-scroll"><table className="billing-register-table"><thead><tr><th>{isVietnamese ? "ĐẶT PHÒNG / KHÁCH" : "RESERVATION / GUEST"}</th><th>{isVietnamese ? "PHÒNG" : "ROOM"}</th><th>{isVietnamese ? "LOẠI LƯU TRÚ" : "TYPE"}</th><th>{isVietnamese ? "THỜI GIAN LƯU TRÚ" : "STAY"}</th><th>{isVietnamese ? "CÁC KHOẢN PHẢI THU" : "CHARGES"}</th><th>{isVietnamese ? "ĐÃ THANH TOÁN" : "PAID"}</th><th>{isVietnamese ? "SỐ DƯ CÒN LẠI" : "BALANCE"}</th><th>{isVietnamese ? "ĐẾN HẠN HIỆN TẠI" : "DUE NOW"}</th><th>{isVietnamese ? "QUÁ HẠN" : "OVERDUE"}</th><th>{isVietnamese ? "NGÀY ĐẾN HẠN CHƯA THANH TOÁN CŨ NHẤT" : "OLDEST UNPAID DUE DATE"}</th><th>{isVietnamese ? "TRẠNG THÁI" : "STATUS"}</th><th>{isVietnamese ? "THAO TÁC" : "ACTIONS"}</th></tr></thead><tbody>
-         {historicalBills.filter(r => billingStatusFilter === 'All' || r.status === billingStatusFilter).map(r=><tr key={r.reservationId}><td><strong>{r.reservationId}</strong><span className="cell-sub">{r.guest}</span><details className="billing-mobile-details"><summary>{isVietnamese ? "Xem chi tiết" : "View details"}</summary><div className="billing-mobile-detail-content"><span><strong>Stay:</strong> {r.checkIn} to {r.checkOut}</span><span><strong>Overdue:</strong> {money(r.overdueAmount)}</span><span><strong>Oldest unpaid due date:</strong> {r.dueDate || '—'}</span></div></details></td><td className="billing-room-number">{r.room}</td><td>{r.rentalType}{r.rentalType==='Monthly'&&r.monthlyRate>0?<span className="cell-sub">{money(r.monthlyRate)}/month</span>:null}</td><td>{r.checkIn}<span className="cell-sub">to {r.checkOut}</span></td><td className="amount-cell">{money(r.charge)}</td><td className="amount-cell">{money(r.paid)}</td><td className="amount-cell"><strong>{money(r.balance)}</strong></td><td className="amount-cell">{money(r.dueNow)}</td><td className="amount-cell">{money(r.overdueAmount)}</td><td>{r.dueDate}</td><td><Badge tone={r.status==='Paid'?'success':r.status==='Overdue'||r.status==='Setup needed'?'warning':'neutral'}>{r.status}</Badge></td><td><div className="table-actions"><Button variant="secondary" onClick={()=>{setSelected(r);setConfigRentalType(r.rentalType==='Monthly'?'Monthly':'Daily');setError('');setModal('configure');}}>Configure</Button><Button onClick={()=>{setSelected(r);setError('');setModal('payment');}} disabled={r.status==='Setup needed'}>Record payment</Button></div></td></tr>)}
-        {!historicalBills.filter(r => billingStatusFilter === 'All' || r.status === billingStatusFilter).length&&<tr><td colSpan={12}>No billing entries for this status.</td></tr>}
+      <Panel title={isVietnamese?"Sổ công nợ khách":"Guest billing register"} subtitle={isVietnamese?"Thiết lập công nợ và thanh toán được lưu riêng với thông tin đặt phòng.":"Billing settings and payments are stored separately from reservations."}><div className="table-scroll billing-register-scroll"><table className="billing-register-table"><thead><tr><th>{isVietnamese ? "ĐẶT PHÒNG / KHÁCH" : "RESERVATION / GUEST"}</th><th>{isVietnamese ? "PHÒNG" : "ROOM"}</th><th>{isVietnamese ? "LOẠI LƯU TRÚ" : "TYPE"}</th><th>{isVietnamese ? "THỜI GIAN LƯU TRÚ" : "STAY"}</th><th>{isVietnamese ? "CÁC KHOẢN PHẢI THU" : "CHARGES"}</th><th>{isVietnamese ? "ĐÃ THANH TOÁN" : "PAID"}</th><th>{isVietnamese ? "SỐ DƯ CÒN LẠI" : "BALANCE"}</th><th>{isVietnamese ? "ĐẾN HẠN HIỆN TẠI" : "DUE NOW"}</th><th>{isVietnamese ? "QUÁ HẠN" : "OVERDUE"}</th><th>{isVietnamese ? "NGÀY ĐẾN HẠN CHƯA THANH TOÁN CŨ NHẤT" : "OLDEST UNPAID DUE DATE"}</th><th>{isVietnamese ? "TRẠNG THÁI" : "STATUS"}</th><th>{isVietnamese ? "THAO TÁC" : "ACTIONS"}</th></tr></thead><tbody>
+         {historicalBills.filter(r => billingStatusFilter === 'All' || r.status === billingStatusFilter).map(r=><tr key={r.reservationId}><td><strong>{r.reservationId}</strong><span className="cell-sub">{r.guest}</span><details className="billing-mobile-details"><summary>{isVietnamese ? "Xem chi tiết" : "View details"}</summary><div className="billing-mobile-detail-content"><span><strong>Stay:</strong> {r.checkIn} to {r.checkOut}</span><span><strong>Overdue:</strong> {money(r.overdueAmount)}</span><span><strong>Oldest unpaid due date:</strong> {r.dueDate || '—'}</span></div></details></td><td className="billing-room-number">{r.room}</td><td>{r.rentalType}{r.rentalType==='Monthly'&&r.monthlyRate>0?<span className="cell-sub">{money(r.monthlyRate)}/month</span>:null}</td><td>{r.checkIn}<span className="cell-sub">to {r.checkOut}</span></td><td className="amount-cell">{money(r.charge)}</td><td className="amount-cell">{money(r.paid)}</td><td className="amount-cell"><strong>{money(r.balance)}</strong></td><td className="amount-cell">{money(r.dueNow)}</td><td className="amount-cell">{money(r.overdueAmount)}</td><td>{r.dueDate}</td><td><Badge tone={r.status==='Paid'?'success':r.status==='Overdue'||r.status==='Setup needed'?'warning':'neutral'}>{r.status}</Badge></td><td><div className="table-actions"><Button variant="secondary" onClick={()=>{setSelected(r);setConfigRentalType(r.rentalType==='Monthly'?'Monthly':'Daily');setError('');setModal('configure');}}> {isVietnamese?"Thiết lập":"Configure"}</Button><Button onClick={()=>{setSelected(r);setError('');setModal('payment');}} disabled={r.status==='Setup needed'}>{isVietnamese?"Ghi nhận thanh toán":"Record payment"}</Button></div></td></tr>)}
+        {!historicalBills.filter(r => billingStatusFilter === 'All' || r.status === billingStatusFilter).length&&<tr><td colSpan={12}>{isVietnamese?"Không có khoản công nợ nào thuộc trạng thái này.":"No billing entries for this status."}</td></tr>}
       </tbody></table></div></Panel>
       </>}
       {section==='installments' && <Panel title="Monthly installment breakdown" subtitle="Each monthly charge is prorated by calendar days. Monthly payments are allocated to the anniversary-based period matching the payment date."><div className="table-scroll installment-breakdown-scroll"><table className="installment-breakdown-table"><thead><tr><th>DUE DATE</th><th>RESERVATION / GUEST</th><th>ROOM</th><th>CHARGE</th><th>ALLOCATED PAID</th><th>REMAINING</th><th>STATUS</th></tr></thead><tbody>
