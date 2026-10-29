@@ -1739,6 +1739,10 @@ function Finance({section = 'billing'}: {section?: 'billing'|'installments'|'pay
   const isVietnamese = useLanguage() === 'vi';
   const [rows,setRows] = useState<AnyRow[]>([]);
   const [bills,setBills] = useState<AnyRow[]>([]);
+  const [roomCharges,setRoomCharges] = useState<AnyRow[]>([]);
+  const [roomChargeModal,setRoomChargeModal] = useState<AnyRow|null>(null);
+  const [roomChargeAction,setRoomChargeAction] = useState<'electricity'|'payment'>('electricity');
+  const [roomChargeError,setRoomChargeError] = useState('');
   const [query,setQuery] = useState('');
   const [billingStatusFilter, setBillingStatusFilter] = useState('Overdue');
   const [open,setOpen] = useState(false);
@@ -1766,8 +1770,10 @@ function Finance({section = 'billing'}: {section?: 'billing'|'installments'|'pay
   const inPeriod = (date:any) => Boolean(date) && date >= periodStart && date <= cutoffDate;
   const load=()=>api.expenses(query).then(r=>setRows(r.data)).catch(()=>{});
   const loadBills=()=>api.billing().then(r=>setBills(r.data)).catch(()=>{});
+  const loadRoomCharges=()=>api.monthlyRoomCharges().then(r=>setRoomCharges(r.data)).catch((err:any)=>setRoomChargeError(err.message||'Could not load room charges.'));
   useEffect(()=>{load();},[query]);
   useEffect(()=>{loadBills();},[]);
+  useEffect(()=>{loadRoomCharges();},[]);
 
   // BILLING REGISTER STICKY HEADER
   useEffect(() => {
@@ -1852,6 +1858,39 @@ function Finance({section = 'billing'}: {section?: 'billing'|'installments'|'pay
   }, [section]);
 
   async function submit(e:FormEvent<HTMLFormElement>){e.preventDefault();const f=new FormData(e.currentTarget);await api.createExpense({description:f.get('description'),category:f.get('category'),property:f.get('property'),amount:f.get('amount'),date:f.get('date')});setOpen(false);load();}
+  async function saveRoomChargeElectricity(e:FormEvent<HTMLFormElement>){
+    e.preventDefault();
+    if(!roomChargeModal)return;
+    const f=new FormData(e.currentTarget);
+    try{
+      await api.updateMonthlyRoomCharge(roomChargeModal.id,{amount:f.get('amount')});
+      setRoomChargeModal(null);
+      setRoomChargeError('');
+      await loadRoomCharges();
+    }catch(err:any){
+      setRoomChargeError(err.message||'Could not save electricity amount.');
+    }
+  }
+  async function saveRoomChargePayment(e:FormEvent<HTMLFormElement>){
+    e.preventDefault();
+    if(!roomChargeModal)return;
+    const f=new FormData(e.currentTarget);
+    try{
+      await api.recordMonthlyRoomChargePayment({
+        chargeId:roomChargeModal.id,
+        amount:f.get('amount'),
+        date:f.get('date'),
+        method:f.get('method'),
+        note:f.get('note')
+      });
+      setRoomChargeModal(null);
+      setRoomChargeError('');
+      await loadRoomCharges();
+    }catch(err:any){
+      setRoomChargeError(err.message||'Could not record room-charge payment.');
+    }
+  }
+
   async function saveConfig(e:FormEvent<HTMLFormElement>){e.preventDefault();if(!selected)return;const f=new FormData(e.currentTarget);try{await api.updateBillingSettings(selected.reservationId,{rentalType:f.get('rentalType'),dailyRate:f.get('dailyRate'),monthlyRate:f.get('monthlyRate')});setModal(null);setSelected(null);setError('');loadBills();}catch(err:any){setError(err.message||'Could not save settings.');}}
   async function savePayment(e:FormEvent<HTMLFormElement>){e.preventDefault();if(!selected)return;const f=new FormData(e.currentTarget);try{await api.recordPayment({reservationId:selected.reservationId,amount:f.get('amount'),date:f.get('date'),effectiveDate:f.get('effectiveDate')||f.get('date'),method:f.get('method'),notes:f.get('notes')});setModal(null);setSelected(null);setError('');loadBills();}catch(err:any){setError(err.message||'Could not record payment.');}}
   async function deletePayment(p:AnyRow){
@@ -1921,7 +1960,10 @@ function Finance({section = 'billing'}: {section?: 'billing'|'installments'|'pay
     for (const payment of historicalPayments) {
       const effectiveDate = String(payment.effectiveDate||payment.date||'');
       if (effectiveDate > cutoffDate) continue;
-      let remaining = Math.max(0,Number(payment.amount||0));
+      let remaining = Math.max(
+        0,
+        Number(payment.amount ?? 0)
+      );
 
       if (r.rentalType === 'Monthly') {
         const eligible = installments.filter(
@@ -1946,6 +1988,7 @@ function Finance({section = 'billing'}: {section?: 'billing'|'installments'|'pay
 
     const dueInstallments = installments.filter((i:any)=>String(i.dueDate||'')<=cutoffDate);
     const charge = dueInstallments.reduce((sum:number,i:any)=>sum+Number(i.charge||0),0);
+    const rentCharge = dueInstallments.reduce((sum:number,i:any)=>sum+Number(i.rentCharge ?? i.charge ?? 0),0);
     const balance = dueInstallments.reduce((sum:number,i:any)=>sum+Number(i.balance||0),0);
     const overdueAmount = dueInstallments.reduce((sum:number,i:any)=>{
       if (Number(i.balance||0)<=0) return sum;
@@ -1963,7 +2006,7 @@ function Finance({section = 'billing'}: {section?: 'billing'|'installments'|'pay
       : balance<=0 ? 'Paid'
       : overdueAmount>0 ? 'Overdue' : 'Due';
     return {
-      ...r, charge, paid, balance, dueNow:charge, overdueAmount,
+      ...r, charge, rentCharge, paid, balance, dueNow:charge, overdueAmount,
       dueDate:dueInstallments.find((i:any)=>Number(i.balance||0)>0)?.dueDate
         || dueInstallments[0]?.dueDate || r.checkIn,
       status,
@@ -2038,7 +2081,7 @@ function Finance({section = 'billing'}: {section?: 'billing'|'installments'|'pay
           </table>
         </div>
       </Panel>
-      <div className="notice"><AlertTriangle size={17}/><div><strong>{isVietnamese?"Quy định tính công nợ":"Billing rules"}</strong><span>{isVietnamese?"Lưu trú theo ngày được tính theo đơn giá mỗi đêm nhân với số đêm và đến hạn khi nhận phòng. Lưu trú theo tháng được phân bổ theo số ngày thực tế trong tháng và tính phí vào mỗi ngày kỷ niệm nhận phòng hàng tháng. Các khoản tháng chưa thanh toán được gia hạn đến 12 giờ trưa ngày 5 theo giờ TP. Hồ Chí Minh. Đêm nhận phòng được tính; ngày trả phòng không được tính. Đặt phòng hiện có mặc định theo ngày và không mặc định là đã thanh toán.":"Daily stays are charged at the configured nightly rate multiplied by the number of nights, due on check-in. Monthly stays are prorated by actual calendar-month days and billed on each monthly check-in anniversary. Unpaid monthly bills have a grace period through noon on the fifth calendar day, Ho Chi Minh City time. Check-in night counts; checkout date does not. Existing reservations default to Daily, and no booking is assumed paid."}</span></div></div>
+      <div className="notice"><AlertTriangle size={17}/><div><strong>{isVietnamese?"Quy định tính công nợ":"Billing rules"}</strong><span>{isVietnamese?"Lưu trú theo ngày được tính theo đơn giá mỗi đêm nhân với số đêm và đến hạn khi nhận phòng. Lưu trú theo tháng được tính đủ đơn giá tháng cho mỗi kỳ tính phí, kể cả kỳ cuối chưa đủ tháng, vào mỗi ngày kỷ niệm nhận phòng hàng tháng. Các khoản tháng chưa thanh toán được gia hạn đến 12 giờ trưa ngày 5 theo giờ TP. Hồ Chí Minh. Đêm nhận phòng được tính; ngày trả phòng không được tính. Đặt phòng hiện có mặc định theo ngày và không mặc định là đã thanh toán.":"Daily stays are charged at the configured nightly rate multiplied by the number of nights, due on check-in. Monthly stays are charged at the full monthly rate for every billing period, including a final partial period, and billed on each monthly check-in anniversary. Unpaid monthly bills have a grace period through noon on the fifth calendar day, Ho Chi Minh City time. Check-in night counts; checkout date does not. Existing reservations default to Daily, and no booking is assumed paid."}</span></div></div>
       <div className="reservation-tabs billing-status-tabs" role="tablist" aria-label="Filter billing entries by status">
         {['Overdue', 'Due', 'Upcoming', 'Paid', 'Setup needed', 'All'].map(status => (
           <Button
@@ -2053,22 +2096,69 @@ function Finance({section = 'billing'}: {section?: 'billing'|'installments'|'pay
           </Button>
         ))}
       </div>
-      <Panel title={isVietnamese?"Sổ công nợ khách":"Guest billing register"} subtitle={isVietnamese?"Thiết lập công nợ và thanh toán được lưu riêng với thông tin đặt phòng.":"Billing settings and payments are stored separately from reservations."}><div className="table-scroll billing-register-scroll"><table className="billing-register-table"><thead><tr><th>{isVietnamese ? "ĐẶT PHÒNG / KHÁCH" : "RESERVATION / GUEST"}</th><th>{isVietnamese ? "PHÒNG" : "ROOM"}</th><th>{isVietnamese ? "LOẠI LƯU TRÚ" : "TYPE"}</th><th>{isVietnamese ? "THỜI GIAN LƯU TRÚ" : "STAY"}</th><th>{isVietnamese ? "CÁC KHOẢN PHẢI THU" : "CHARGES"}</th><th>{isVietnamese ? "ĐÃ THANH TOÁN" : "PAID"}</th><th>{isVietnamese ? "SỐ DƯ CÒN LẠI" : "BALANCE"}</th><th>{isVietnamese ? "ĐẾN HẠN HIỆN TẠI" : "DUE NOW"}</th><th>{isVietnamese ? "QUÁ HẠN" : "OVERDUE"}</th><th>{isVietnamese ? "NGÀY ĐẾN HẠN CHƯA THANH TOÁN CŨ NHẤT" : "OLDEST UNPAID DUE DATE"}</th><th>{isVietnamese ? "TRẠNG THÁI" : "STATUS"}</th><th>{isVietnamese ? "THAO TÁC" : "ACTIONS"}</th></tr></thead><tbody>
-         {historicalBills.filter(r => billingStatusFilter === 'All' || r.status === billingStatusFilter).map(r=><tr key={r.reservationId}><td><strong>{r.reservationId}</strong><span className="cell-sub">{r.guest}</span><details className="billing-mobile-details"><summary>{isVietnamese ? "Xem chi tiết" : "View details"}</summary><div className="billing-mobile-detail-content"><span><strong>Stay:</strong> {r.checkIn} to {r.checkOut}</span><span><strong>Overdue:</strong> {money(r.overdueAmount)}</span><span><strong>Oldest unpaid due date:</strong> {r.dueDate || '—'}</span></div></details></td><td className="billing-room-number">{r.room}</td><td>{r.rentalType}{r.rentalType==='Monthly'&&r.monthlyRate>0?<span className="cell-sub">{money(r.monthlyRate)}/month</span>:null}</td><td>{r.checkIn}<span className="cell-sub">to {r.checkOut}</span></td><td className="amount-cell">{money(r.charge)}</td><td className="amount-cell">{money(r.paid)}</td><td className="amount-cell"><strong>{money(r.balance)}</strong></td><td className="amount-cell">{money(r.dueNow)}</td><td className="amount-cell">{money(r.overdueAmount)}</td><td>{r.dueDate}</td><td><Badge tone={r.status==='Paid'?'success':r.status==='Overdue'||r.status==='Setup needed'?'warning':'neutral'}>{r.status}</Badge></td><td><div className="table-actions"><Button variant="secondary" onClick={()=>{setSelected(r);setConfigRentalType(r.rentalType==='Monthly'?'Monthly':'Daily');setError('');setModal('configure');}}> {isVietnamese?"Thiết lập":"Configure"}</Button><Button onClick={()=>{setSelected(r);setError('');setModal('payment');}} disabled={r.status==='Setup needed'}>{isVietnamese?"Ghi nhận thanh toán":"Record payment"}</Button></div></td></tr>)}
-        {!historicalBills.filter(r => billingStatusFilter === 'All' || r.status === billingStatusFilter).length&&<tr><td colSpan={12}>{isVietnamese?"Không có khoản công nợ nào thuộc trạng thái này.":"No billing entries for this status."}</td></tr>}
+      <Panel
+        title={isVietnamese ? "Các khoản phí phòng hàng tháng" : "Monthly room charges"}
+        subtitle={isVietnamese
+          ? "Phí quản lý và tiền nước đã được tính vào các khoản thanh toán tháng hiện có. Tiền điện hiện là 0 VND."
+          : "Management and water fees are included in existing monthly payments. Electricity is currently 0 VND."}
+      >
+        <div className="notice">
+          <div>
+            <strong>{isVietnamese ? "Phí đã gộp vào thanh toán" : "Fees included in payments"}</strong>
+            <span>
+              {isVietnamese
+                ? "Mỗi khoản thanh toán tháng bao gồm tiền thuê, phí quản lý 300.000 VND và tiền nước 100.000 VND mỗi khách. Tiền điện hiện là 0 VND. Không ghi nhận các khoản này thành công nợ riêng để tránh tính hai lần."
+                : "Each applicable monthly payment includes rent, a 300,000 VND management fee, and water at 100,000 VND per guest. Electricity is currently 0 VND. These components are not shown as separate outstanding balances, preventing double charging."}
+            </span>
+          </div>
+        </div>
+      </Panel>
+      <Panel title={isVietnamese?"Sổ công nợ khách":"Guest billing register"} subtitle={isVietnamese?"Thiết lập công nợ và thanh toán được lưu riêng với thông tin đặt phòng.":"Billing settings and payments are stored separately from reservations."}><div className="table-scroll billing-register-scroll"><table className="billing-register-table"><thead><tr><th>{isVietnamese ? "ĐẶT PHÒNG / KHÁCH" : "RESERVATION / GUEST"}</th><th>{isVietnamese ? "PHÒNG" : "ROOM"}</th><th>{isVietnamese ? "LOẠI LƯU TRÚ" : "TYPE"}</th><th>{isVietnamese ? "THỜI GIAN LƯU TRÚ" : "STAY"}</th><th>{isVietnamese ? "TIỀN THUÊ" : "RENT"}</th><th>{isVietnamese ? "TIỀN NƯỚC" : "WATER"}</th><th>{isVietnamese ? "PHÍ QUẢN LÝ" : "MANAGEMENT"}</th><th>{isVietnamese ? "TIỀN ĐIỆN" : "ELECTRICITY"}</th><th>{isVietnamese ? "ĐÃ THANH TOÁN" : "PAID"}</th><th>{isVietnamese ? "SỐ DƯ CÒN LẠI" : "BALANCE"}</th><th>{isVietnamese ? "ĐẾN HẠN HIỆN TẠI" : "DUE NOW"}</th><th>{isVietnamese ? "QUÁ HẠN" : "OVERDUE"}</th><th>{isVietnamese ? "NGÀY ĐẾN HẠN CHƯA THANH TOÁN CŨ NHẤT" : "OLDEST UNPAID DUE DATE"}</th><th>{isVietnamese ? "TRẠNG THÁI" : "STATUS"}</th><th>{isVietnamese ? "THAO TÁC" : "ACTIONS"}</th></tr></thead><tbody>
+         {historicalBills.filter(r => billingStatusFilter === 'All' || r.status === billingStatusFilter).map(r=><tr key={r.reservationId}><td><strong>{r.reservationId}</strong><span className="cell-sub">{r.guest}</span><details className="billing-mobile-details"><summary>{isVietnamese ? "Xem chi tiết" : "View details"}</summary><div className="billing-mobile-detail-content"><span><strong>Stay:</strong> {r.checkIn} to {r.checkOut}</span><span><strong>Overdue:</strong> {money(r.overdueAmount)}</span><span><strong>Oldest unpaid due date:</strong> {r.dueDate || '—'}</span></div></details></td><td className="billing-room-number">{r.room}</td><td>{r.rentalType}{r.rentalType==='Monthly'&&r.monthlyRate>0?<span className="cell-sub">{money(r.monthlyRate)}/month</span>:null}</td><td>{r.checkIn}<span className="cell-sub">to {r.checkOut}</span></td><td className="amount-cell">{money(r.rentCharge ?? r.charge)}</td><td className="amount-cell">{r.rentalType==='Monthly'?money(r.waterCharge):'—'}</td><td className="amount-cell">{r.rentalType==='Monthly'?money(r.managementCharge):'—'}</td><td className="amount-cell">{r.rentalType==='Monthly'?money(r.electricityCharge):'—'}</td><td className="amount-cell">{money(r.paid)}</td><td className="amount-cell"><strong>{money(r.balance)}</strong></td><td className="amount-cell">{money(r.dueNow)}</td><td className="amount-cell">{money(r.overdueAmount)}</td><td>{r.dueDate}</td><td><Badge tone={r.status==='Paid'?'success':r.status==='Overdue'||r.status==='Setup needed'?'warning':'neutral'}>{r.status}</Badge></td><td><div className="table-actions"><Button variant="secondary" onClick={()=>{setSelected(r);setConfigRentalType(r.rentalType==='Monthly'?'Monthly':'Daily');setError('');setModal('configure');}}> {isVietnamese?"Thiết lập":"Configure"}</Button><Button onClick={()=>{setSelected(r);setError('');setModal('payment');}} disabled={r.status==='Setup needed'}>{isVietnamese?"Ghi nhận thanh toán":"Record payment"}</Button></div></td></tr>)}
+        {!historicalBills.filter(r => billingStatusFilter === 'All' || r.status === billingStatusFilter).length&&<tr><td colSpan={15}>{isVietnamese?"Không có khoản công nợ nào thuộc trạng thái này.":"No billing entries for this status."}</td></tr>}
       </tbody></table></div></Panel>
       </>}
-      {section==='installments' && <Panel title="Monthly installment breakdown" subtitle="Each monthly charge is prorated by calendar days. Monthly payments are allocated to the anniversary-based period matching the payment date."><div className="table-scroll installment-breakdown-scroll"><table className="installment-breakdown-table"><thead><tr><th>DUE DATE</th><th>RESERVATION / GUEST</th><th>ROOM</th><th>CHARGE</th><th>ALLOCATED PAID</th><th>REMAINING</th><th>STATUS</th></tr></thead><tbody>
+      {section==='installments' && <Panel title="Monthly installment breakdown" subtitle="Each monthly billing period is charged at the full monthly rate, including the final partial period. Monthly payments are allocated to the anniversary-based period matching the payment date."><div className="table-scroll installment-breakdown-scroll"><table className="installment-breakdown-table"><thead><tr><th>DUE DATE</th><th>RESERVATION / GUEST</th><th>ROOM</th><th>CHARGE</th><th>ALLOCATED PAID</th><th>REMAINING</th><th>STATUS</th></tr></thead><tbody>
         {monthlyInstallments.map((i:any)=><tr key={`${i.reservationId}-${i.dueDate}`}><td>{i.dueDate}</td><td><strong>{i.reservationId}</strong><span className="cell-sub">{i.guest}</span></td><td>{i.room}</td><td className="amount-cell">{money(i.charge)}</td><td className="amount-cell">{money(i.paid)}</td><td className="amount-cell"><strong>{money(i.balance)}</strong></td><td><Badge tone={i.status==='Paid'?'success':i.status==='Overdue'?'warning':i.status==='Due'?'neutral':'info'}>{i.status}</Badge></td></tr>)}
         {!monthlyInstallments.length&&<tr><td colSpan={7}>No monthly installments configured.</td></tr>}
       </tbody></table></div></Panel>}
       {section==='payments' && <Panel title="Payment history" subtitle="Actual recorded payments; existing bookings have no assumed payments."><div className="table-scroll payment-history-scroll"><table className="payment-history-table"><thead><tr><th>DATE / PAYMENT</th><th>RESERVATION</th><th>METHOD</th><th>NOTES</th><th>AMOUNT</th><th>ACTIONS</th></tr></thead><tbody>
-        {paymentsInPeriod.sort((a,b)=>String(b.date).localeCompare(String(a.date))).map((p:AnyRow)=><tr key={p.id}><td><strong>{p.date}</strong><span className="cell-sub">{p.id}</span>{p.effectiveDate&&p.effectiveDate!==p.date&&<span className="cell-sub">Effective {p.effectiveDate}</span>}</td><td>{p.reservationId}<span className="payment-guest-name">{p.guest}</span></td><td>{p.method}</td><td>{p.notes||'—'}</td><td className="amount-cell">{money(p.amount)}</td><td><button type="button" className="reservation-edit-btn" onClick={()=>{setSelectedPayment(p);setError('');setModal('editPayment');}}>Edit</button><span className="payment-delete-button"><Button variant="secondary" onClick={()=>deletePayment(p)}>Delete</Button></span></td></tr>)}
+        {paymentsInPeriod.sort((a,b)=>String(b.date).localeCompare(String(a.date))).map((p:AnyRow)=><tr key={p.id}><td><strong>{p.date}</strong><span className="cell-sub">{p.id}</span>{p.effectiveDate&&p.effectiveDate!==p.date&&<span className="cell-sub">Effective {p.effectiveDate}</span>}</td><td>{p.reservationId}<span className="payment-guest-name">{p.guest}</span></td><td>{p.method}</td><td>{p.notes||'—'}</td><td className="amount-cell">{money(p.amount)}{p.monthlyFeeBreakdown&&<span className="cell-sub">Rent {money(p.rentAmount)} · Management {money(p.managementFee)} · Water {money(p.waterFee)} · Electricity {money(p.electricityFee||0)}</span>}</td><td><button type="button" className="reservation-edit-btn" onClick={()=>{setSelectedPayment(p);setError('');setModal('editPayment');}}>Edit</button><span className="payment-delete-button"><Button variant="secondary" onClick={()=>deletePayment(p)}>Delete</Button></span></td></tr>)}
         {!paymentsInPeriod.length&&<tr><td colSpan={6}>No payments recorded in this period.</td></tr>}
       </tbody></table></div></Panel>}
     </>}
     {open&&<Modal title="Record an expense" onClose={()=>setOpen(false)}><form className="form-grid" onSubmit={submit}><label className="span-2">Description<input name="description" required placeholder="What was purchased or paid for?"/></label><label>Category<select name="category"><option>Utilities</option><option>Supplies</option><option>Maintenance</option><option>Payroll</option><option>Marketing</option><option>Other</option></select></label><label>Business unit<select name="property"><option>Hotel A</option><option>Hotel B</option></select></label><label>Amount (VND)<input type="number" name="amount" min="1" required/></label><label>Date<input type="date" name="date" defaultValue={today}/></label><div className="form-actions span-2"><Button variant="secondary" onClick={()=>setOpen(false)}>Cancel</Button><Button type="submit">Save expense</Button></div></form></Modal>}
-    {modal==='configure'&&selected&&<Modal title={`Billing settings · ${selected.reservationId}`} onClose={()=>{setModal(null);setSelected(null);setError('');}}><form className="form-grid" onSubmit={saveConfig}><p className="span-2">Guest: <strong>{selected.guest}</strong>, room {selected.room}. Billing rates are stored separately from reservation details.</p><label className="span-2">Rental type<select name="rentalType" value={configRentalType} onChange={(e)=>setConfigRentalType(e.target.value as 'Daily'|'Monthly')}><option value="Daily">Daily — rate per night</option><option value="Monthly">Monthly — calendar-day proration</option></select></label>{configRentalType==='Daily'&&<label className="span-2">Daily rate (VND per night)<input name="dailyRate" type="number" min="1" step="any" defaultValue={selected.dailyRate ?? ''} placeholder="Enter daily rate" required/></label>}{configRentalType==='Monthly'&&<label className="span-2">Monthly rent (VND)<input name="monthlyRate" type="number" min="1" step="1" defaultValue={selected.monthlyRate||''} placeholder="Enter monthly rent" required/></label>}{error&&<p className="span-2">{error}</p>}<div className="form-actions span-2"><Button variant="secondary" onClick={()=>{setModal(null);setSelected(null);}}>Cancel</Button><Button type="submit">Save settings</Button></div></form></Modal>}
+    {roomChargeModal&&roomChargeAction==='electricity'&&<Modal title={isVietnamese?"Nhập tiền điện":"Enter electricity charge"} onClose={()=>{setRoomChargeModal(null);setRoomChargeError('');}}>
+      <form className="form-grid" onSubmit={saveRoomChargeElectricity}>
+        <p className="span-2">{isVietnamese?"Đặt phòng":"Reservation"}: <strong>{roomChargeModal.reservationId}</strong> · {isVietnamese?"Phòng":"Room"} {roomChargeModal.room} · {roomChargeModal.period}. Only this billing period will be updated.</p>
+        <label className="span-2">{isVietnamese?"Tiền điện (VND)":"Electricity amount (VND)"}
+          <input name="amount" type="number" min="0" step="1" defaultValue={roomChargeModal.electricityEntered?roomChargeModal.amount:''} placeholder="Enter amount; 0 is allowed" required/>
+        </label>
+        {roomChargeError&&<p className="span-2">{roomChargeError}</p>}
+        <div className="form-actions span-2">
+          <Button variant="secondary" onClick={()=>{setRoomChargeModal(null);setRoomChargeError('');}}>{isVietnamese?'Hủy':'Cancel'}</Button>
+          <Button type="submit">{isVietnamese?'Lưu tiền điện':'Save electricity'}</Button>
+        </div>
+      </form>
+    </Modal>}
+    {roomChargeModal&&roomChargeAction==='payment'&&<Modal title={isVietnamese?"Ghi nhận thu phí phòng":"Record room-charge payment"} onClose={()=>{setRoomChargeModal(null);setRoomChargeError('');}}>
+      <form className="form-grid" onSubmit={saveRoomChargePayment}>
+        <p className="span-2">{isVietnamese?"Đặt phòng":"Reservation"}: <strong>{roomChargeModal.reservationId}</strong> · {roomChargeModal.type} · {roomChargeModal.period}. {isVietnamese?"Còn lại":"Balance"}: <strong>{roomChargeModal.balance==null?'—':money(roomChargeModal.balance)}</strong></p>
+        <label>{isVietnamese?"Số tiền (VND)":"Amount (VND)"}
+          <input name="amount" type="number" min="1" max={roomChargeModal.balance} step="1" defaultValue={roomChargeModal.balance>0?roomChargeModal.balance:''} required/>
+        </label>
+        <label>{isVietnamese?"Ngày thu":"Payment date"}<input name="date" type="date" defaultValue={today} required/></label>
+        <label>{isVietnamese?"Phương thức":"Method"}<select name="method"><option>Cash</option><option>Bank transfer</option><option>Card</option><option>Other</option></select></label>
+        <label>{isVietnamese?"Ghi chú":"Note"}<input name="note" maxLength={500} placeholder="Optional reference"/></label>
+        {roomChargeError&&<p className="span-2">{roomChargeError}</p>}
+        <div className="form-actions span-2">
+          <Button variant="secondary" onClick={()=>{setRoomChargeModal(null);setRoomChargeError('');}}>{isVietnamese?'Hủy':'Cancel'}</Button>
+          <Button type="submit">{isVietnamese?'Lưu thanh toán':'Save payment'}</Button>
+        </div>
+      </form>
+    </Modal>}
+
+    {modal==='configure'&&selected&&<Modal title={`Billing settings · ${selected.reservationId}`} onClose={()=>{setModal(null);setSelected(null);setError('');}}><form className="form-grid" onSubmit={saveConfig}><p className="span-2">Guest: <strong>{selected.guest}</strong>, room {selected.room}. Billing rates are stored separately from reservation details.</p><label className="span-2">Rental type<select name="rentalType" value={configRentalType} onChange={(e)=>setConfigRentalType(e.target.value as 'Daily'|'Monthly')}><option value="Daily">Daily — rate per night</option><option value="Monthly">Monthly — full rate per billing period</option></select></label>{configRentalType==='Daily'&&<label className="span-2">Daily rate (VND per night)<input name="dailyRate" type="number" min="1" step="any" defaultValue={selected.dailyRate ?? ''} placeholder="Enter daily rate" required/></label>}{configRentalType==='Monthly'&&<label className="span-2">Monthly rent (VND)<input name="monthlyRate" type="number" min="1" step="1" defaultValue={selected.monthlyRate||''} placeholder="Enter monthly rent" required/></label>}{error&&<p className="span-2">{error}</p>}<div className="form-actions span-2"><Button variant="secondary" onClick={()=>{setModal(null);setSelected(null);}}>Cancel</Button><Button type="submit">Save settings</Button></div></form></Modal>}
     {modal==='payment'&&selected&&<Modal title={`Record payment · ${selected.reservationId}`} onClose={()=>{setModal(null);setSelected(null);setError('');}}><form className="form-grid" onSubmit={savePayment}><p className="span-2">Guest: <strong>{selected.guest}</strong>. Balance: <strong>{money(selected.balance)}</strong></p><label>Amount (VND)<input name="amount" type="number" min="1" max={selected.rentalType==='Monthly' ? undefined : Math.max(1,selected.balance)} defaultValue={selected.balance>0?selected.balance:''} required/></label><label>Payment date<input name="date" type="date" defaultValue={today} required/></label><label>Effective date (optional)<input name="effectiveDate" type="date"/><span className="cell-sub">Leave blank to use the payment date.</span></label><label>Method<select name="method"><option>Cash</option><option>Bank transfer</option><option>Card</option><option>Other</option></select></label><label>Notes<input name="notes" maxLength={500} placeholder="Optional reference"/></label>{error&&<p className="span-2">{error}</p>}<div className="form-actions span-2"><Button variant="secondary" onClick={()=>{setModal(null);setSelected(null);}}>Cancel</Button><Button type="submit">Save payment</Button></div></form></Modal>}
     {modal==='editPayment'&&selectedPayment&&<Modal title={`Edit payment · ${selectedPayment.id}`} onClose={()=>{setModal(null);setSelectedPayment(null);setError('');}}><form className="form-grid" onSubmit={saveEditedPayment}><p className="span-2">Reservation: <strong>{selectedPayment.reservationId}</strong>. Editing updates this payment rather than creating a new one.</p><label>Amount (VND)<input name="amount" type="number" min="1" step="1" defaultValue={selectedPayment.amount} required/></label><label>Payment date<input name="date" type="date" defaultValue={selectedPayment.date} required/></label><label>Effective date<input name="effectiveDate" type="date" defaultValue={selectedPayment.effectiveDate||selectedPayment.date} required/><span className="cell-sub">Controls when the balance is reduced.</span></label><label>Method<select name="method" defaultValue={selectedPayment.method}><option>Cash</option><option>Bank transfer</option><option>Card</option><option>Other</option></select></label><label>Notes<input name="notes" maxLength={500} defaultValue={selectedPayment.notes||''} placeholder="Optional reference"/></label>{error&&<p className="span-2">{error}</p>}<div className="form-actions span-2"><Button variant="secondary" onClick={()=>{setModal(null);setSelectedPayment(null);setError('');}}>Cancel</Button><Button type="submit">Save changes</Button></div></form></Modal>}
   </>;

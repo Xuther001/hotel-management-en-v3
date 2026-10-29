@@ -84,6 +84,18 @@ export const api = {
   expenses: (q = '') => request<any>(`/finance/expenses?q=${encodeURIComponent(q)}`),
   createExpense: (data: any) => request<any>('/finance/expenses', { method: 'POST', body: JSON.stringify(data) }),
   billing: () => request<any>('/billing'),
+  monthlyRoomCharges: () => request<any>('/billing/monthly-room-charges'),
+  updateMonthlyRoomCharge: (id: string, data: any) =>
+    request<any>(`/billing/monthly-room-charges/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data)
+    }),
+  recordMonthlyRoomChargePayment: (data: any) =>
+    request<any>('/billing/monthly-room-charges/payments', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }),
+
   updateBillingSettings: (id: string, data: any) => request<any>(`/billing/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(data) }),
   recordPayment: (data: any) => request<any>('/billing/payments', { method: 'POST', body: JSON.stringify(data) }),
   updatePayment: (id: string, data: any) => request<any>(`/billing/payments/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(data) }),

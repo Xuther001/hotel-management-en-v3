@@ -1661,22 +1661,19 @@ function getBillingRows(d: AnyRecord) {
           );
         };
 
-        // Each complete check-in-to-anniversary period costs one full month.
-        // Only the final incomplete period is prorated by its actual period length.
+        // Every monthly billing period is charged at the full monthly rate,
+        // including the final period if checkout occurs before the anniversary.
         let periodStart = start;
         let monthOffset = 1;
 
         while (periodStart < end) {
           const nextAnniversary = anniversary(monthOffset);
           const periodEnd = Math.min(end, nextAnniversary);
-          const periodNights = Math.round((periodEnd - periodStart) / 86400000);
-          const periodDays = Math.round((nextAnniversary - periodStart) / 86400000);
-          const isFullMonth = nextAnniversary <= end;
-
-          const rawAmount = isFullMonth
-            ? monthlyRate
-            : monthlyRate / Math.max(1, periodDays) * periodNights;
-          const amount = Math.round(rawAmount / 1000) * 1000;
+          const rentAmount = Math.round(monthlyRate / 1000) * 1000;
+          const waterFee = Math.max(0, Number(r.guests || 0)) * 100000;
+          const managementFee = 300000;
+          const electricityFee = 0;
+          const amount = rentAmount + waterFee + managementFee + electricityFee;
 
           const periodDate = new Date(periodStart).toISOString().slice(0, 10);
 
@@ -1687,6 +1684,7 @@ function getBillingRows(d: AnyRecord) {
 
           installments.push({
             dueDate,
+            rentCharge: rentAmount,
             charge: amount,
             paid: 0,
             balance: amount
@@ -1699,8 +1697,30 @@ function getBillingRows(d: AnyRecord) {
 
       installments.sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)));
 
+      const feeAudit = Array.isArray(d.monthlyPaymentFeeMigrationAudit)
+        ? d.monthlyPaymentFeeMigrationAudit
+        : [];
+      const feeAuditByPaymentId = new Map(
+        feeAudit.map((entry: AnyRecord) => [String(entry.paymentId), entry])
+      );
+
       const reservationPayments = payments
         .filter((x: AnyRecord) => x.reservationId === r.id)
+        .map((x: AnyRecord) => {
+          const audit = feeAuditByPaymentId.get(String(x.id)) as AnyRecord | undefined;
+          if (!audit) return x;
+
+          const managementFee = Math.max(0, Number(audit.addedManagementFee || 0));
+          const waterFee = Math.max(0, Number(audit.addedWaterFee || 0));
+          return {
+            ...x,
+            rentAmount: Math.max(0, Number(audit.originalAmount || 0)),
+            monthlyFeeBreakdown: true,
+            managementFee,
+            waterFee,
+            electricityFee: 0
+          };
+        })
         .sort((a: AnyRecord, b: AnyRecord) =>
           String(a.effectiveDate || a.date || '').localeCompare(
             String(b.effectiveDate || b.date || '')
@@ -1747,7 +1767,10 @@ function getBillingRows(d: AnyRecord) {
         const effectiveDate = String(payment.effectiveDate || payment.date || '');
         if (effectiveDate > today) continue;
 
-        let remaining = Math.max(0, Number(payment.amount || 0));
+        let remaining = Math.max(
+          0,
+          Number(payment.amount || 0)
+        );
 
         if (rentalType === 'Monthly') {
           const installment = monthlyInstallmentForPayment(
@@ -1771,8 +1794,13 @@ function getBillingRows(d: AnyRecord) {
         }
       }
 
-      const charge = installments.reduce((sum, x) => sum + x.charge, 0);
-      const balance = Math.max(0, charge - paid);
+      const charge = installments.reduce(
+        (sum, x) => sum + Number(x.rentCharge ?? x.charge ?? 0), 0
+      );
+      const totalCharge = installments.reduce(
+        (sum, x) => sum + Number(x.charge || 0), 0
+      );
+      const balance = Math.max(0, totalCharge - paid);
       const dueNow = installments.reduce(
         (sum, x) => sum + (x.dueDate <= today ? x.balance : 0), 0
       );
@@ -1794,7 +1822,7 @@ function getBillingRows(d: AnyRecord) {
         || installments[0]?.dueDate
         || String(r.checkIn || today);
 
-      const status = charge <= 0
+      const status = totalCharge <= 0
         ? 'Setup needed'
         : balance <= 0
           ? 'Paid'
@@ -1815,7 +1843,16 @@ function getBillingRows(d: AnyRecord) {
         rentalType,
         monthlyRate,
         dailyRate,
+        guests: Math.max(0, Number(r.guests || 0)),
+        waterCharge: rentalType === 'Monthly'
+          ? Math.max(0, Number(r.guests || 0)) * 100000
+          : 0,
+        managementCharge: rentalType === 'Monthly'
+          ? 300000
+          : 0,
+        electricityCharge: 0,
         charge,
+        totalCharge,
         paid,
         balance,
         dueNow,
@@ -1843,6 +1880,213 @@ function getBillingRows(d: AnyRecord) {
       });
     });
 }
+
+function monthlyRoomChargeDateParts(value: string): { year: number; month: number; day: number } | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value || ''));
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const check = new Date(Date.UTC(year, month - 1, day));
+  if (check.getUTCFullYear() !== year || check.getUTCMonth() !== month - 1 || check.getUTCDate() !== day) return null;
+  return { year, month, day };
+}
+
+function monthlyRoomChargeDate(parts: { year: number; month: number; day: number }, monthOffset: number): string {
+  const first = new Date(Date.UTC(parts.year, parts.month - 1 + monthOffset, 1));
+  const year = first.getUTCFullYear();
+  const month = first.getUTCMonth();
+  const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+  const day = Math.min(parts.day, lastDay);
+  return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+function ensureMonthlyRoomCharges(d: AnyRecord): boolean {
+  if (!Array.isArray(d.monthlyRoomCharges)) d.monthlyRoomCharges = [];
+  if (!Array.isArray(d.monthlyRoomChargePayments)) d.monthlyRoomChargePayments = [];
+
+  const existing = new Set(
+    d.monthlyRoomCharges.map((charge: AnyRecord) =>
+      `${charge.reservationId}|${charge.dueDate}|${charge.type}`
+    )
+  );
+  let changed = false;
+
+  const reservations = Array.isArray(d.reservations) ? d.reservations : [];
+  const settings = Array.isArray(d.billingSettings) ? d.billingSettings : [];
+
+  for (const reservation of reservations) {
+    const status = String(reservation.status || '').toLowerCase();
+    if (status === 'cancelled' || status === 'no-show' || status === 'noshow') continue;
+
+    const setting = settings.find((item: AnyRecord) => item.reservationId === reservation.id);
+    if (!setting || setting.rentalType !== 'Monthly') continue;
+
+    const start = monthlyRoomChargeDateParts(reservation.checkIn);
+    const end = monthlyRoomChargeDateParts(reservation.checkOut);
+    if (!start || !end || reservation.checkOut <= reservation.checkIn) continue;
+
+    const guests = Math.max(1, Math.floor(Number(reservation.guests) || 1));
+    let monthOffset = 0;
+    // Each eligible anniversary-based billing period gets a full monthly charge.
+    // A final partial period is included without prorating.
+    while (monthOffset < 240) {
+      const dueDate = monthlyRoomChargeDate(start, monthOffset);
+      if (dueDate >= reservation.checkOut) break;
+
+      const nextDueDate = monthlyRoomChargeDate(start, monthOffset + 1);
+      const period = dueDate.slice(0, 7);
+      const common = {
+        reservationId: reservation.id,
+        propertyId: reservation.propertyId,
+        room: reservation.room,
+        guest: reservation.guest,
+        dueDate,
+        period,
+        periodEnd: nextDueDate,
+        createdAt: new Date().toISOString()
+      };
+
+      const charges = [
+        { type: 'Water', amount: 100000 * guests },
+        { type: 'Management fee', amount: 300000 },
+        { type: 'Electricity', amount: null }
+      ];
+
+      for (const item of charges) {
+        const key = `${reservation.id}|${dueDate}|${item.type}`;
+        if (existing.has(key)) continue;
+        d.monthlyRoomCharges.push({
+          id: `MRC-${encodeURIComponent(String(reservation.id))}-${dueDate}-${item.type.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+          ...common,
+          type: item.type,
+          amount: item.amount,
+          electricityEntered: item.type !== 'Electricity',
+        });
+        existing.add(key);
+        changed = true;
+      }
+      monthOffset += 1;
+    }
+  }
+
+  return changed;
+}
+
+function getMonthlyRoomChargeLedger(d: AnyRecord): AnyRecord[] {
+  const charges: AnyRecord[] = Array.isArray(d.monthlyRoomCharges) ? d.monthlyRoomCharges : [];
+  const payments: AnyRecord[] = Array.isArray(d.monthlyRoomChargePayments) ? d.monthlyRoomChargePayments : [];
+
+  return charges.map((charge: AnyRecord) => {
+    const chargePayments = payments.filter((payment: AnyRecord) => payment.chargeId === charge.id);
+    const paid = chargePayments.reduce((sum: number, payment: AnyRecord) => sum + Math.max(0, Number(payment.amount) || 0), 0);
+    const electricityMissing = charge.type === 'Electricity'
+      && charge.amount === null
+      && charge.electricityEntered !== true;
+    const amount = electricityMissing ? null : Math.max(0, Number(charge.amount) || 0);
+    const balance = amount === null ? null : Math.max(0, amount - paid);
+    const status = electricityMissing
+      ? 'Missing electricity'
+      : balance === 0
+        ? 'Paid'
+        : paid > 0
+          ? 'Partially paid'
+          : 'Unpaid';
+
+    return { ...charge, amount, paid, balance, status, electricityMissing, payments: chargePayments };
+  }).sort((a: AnyRecord, b: AnyRecord) =>
+    String(a.dueDate).localeCompare(String(b.dueDate))
+    || String(a.room || '').localeCompare(String(b.room || ''))
+    || String(a.type).localeCompare(String(b.type))
+  );
+}
+
+app.get('/api/v1/billing/monthly-room-charges', (_req, res) => {
+  const d = readData();
+  if (ensureMonthlyRoomCharges(d)) writeData(d);
+  res.json({
+    data: getMonthlyRoomChargeLedger(d),
+    payments: Array.isArray(d.monthlyRoomChargePayments) ? d.monthlyRoomChargePayments : []
+  });
+});
+
+app.patch('/api/v1/billing/monthly-room-charges/:chargeId', (req, res) => {
+  const d = readData();
+  if (ensureMonthlyRoomCharges(d)) writeData(d);
+
+  const charge = (d.monthlyRoomCharges || []).find((item: AnyRecord) => item.id === req.params.chargeId);
+  if (!charge) return res.status(404).json({ error: 'Room charge not found' });
+  if (charge.type !== 'Electricity') {
+    return res.status(400).json({ error: 'Only electricity charges can be edited here' });
+  }
+
+  const rawAmount = req.body?.amount;
+  if (rawAmount === undefined || rawAmount === null || String(rawAmount).trim() === '') {
+    return res.status(400).json({ error: 'Enter an electricity amount; zero is allowed' });
+  }
+  const amount = Number(rawAmount);
+  if (!Number.isFinite(amount) || amount < 0 || !Number.isSafeInteger(amount)) {
+    return res.status(400).json({ error: 'Electricity amount must be a non-negative whole number in VND' });
+  }
+
+  const alreadyPaid = (d.monthlyRoomChargePayments || [])
+    .filter((payment: AnyRecord) => payment.chargeId === charge.id)
+    .reduce((sum: number, payment: AnyRecord) => sum + (Number(payment.amount) || 0), 0);
+  if (amount < alreadyPaid) {
+    return res.status(400).json({ error: 'Electricity amount cannot be less than payments already recorded' });
+  }
+
+  charge.amount = amount;
+  charge.electricityEntered = true;
+  charge.updatedAt = new Date().toISOString();
+  writeData(d);
+  res.json({ data: getMonthlyRoomChargeLedger(d).find((item: AnyRecord) => item.id === charge.id) });
+});
+
+app.post('/api/v1/billing/monthly-room-charges/payments', (req, res) => {
+  const d = readData();
+  if (ensureMonthlyRoomCharges(d)) writeData(d);
+
+  const chargeId = String(req.body?.chargeId || '');
+  const charge = (d.monthlyRoomCharges || []).find((item: AnyRecord) => item.id === chargeId);
+  if (!charge) return res.status(404).json({ error: 'Room charge not found' });
+
+  const ledger = getMonthlyRoomChargeLedger(d).find((item: AnyRecord) => item.id === charge.id);
+  if (!ledger || ledger.electricityMissing) {
+    return res.status(400).json({ error: 'Enter the electricity amount before recording a payment' });
+  }
+
+  const amount = Number(req.body?.amount);
+  if (!Number.isSafeInteger(amount) || amount <= 0) {
+    return res.status(400).json({ error: 'Payment amount must be a positive whole number in VND' });
+  }
+  if (amount > ledger.balance) {
+    return res.status(400).json({ error: 'Payment cannot exceed the outstanding balance' });
+  }
+
+  const date = String(req.body?.date || new Date().toISOString().slice(0, 10));
+  if (!monthlyRoomChargeDateParts(date)) {
+    return res.status(400).json({ error: 'Payment date must be YYYY-MM-DD' });
+  }
+
+  const payment = {
+    id: `MRCP-${Date.now()}-${randomBytes(4).toString('hex')}`,
+    chargeId: charge.id,
+    reservationId: charge.reservationId,
+    amount,
+    date,
+    method: String(req.body?.method || 'Cash'),
+    note: String(req.body?.note || '').slice(0, 500),
+    createdAt: new Date().toISOString()
+  };
+  d.monthlyRoomChargePayments.push(payment);
+  writeData(d);
+  res.status(201).json({
+    data: payment,
+    charge: getMonthlyRoomChargeLedger(d).find((item: AnyRecord) => item.id === charge.id)
+  });
+});
+
 app.get('/api/v1/billing', (_req, res) => {
   const d = readData();
   res.json({ data: getBillingRows(d), payments: Array.isArray(d.payments) ? d.payments : [] });
