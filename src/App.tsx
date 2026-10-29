@@ -1890,10 +1890,20 @@ function Finance({section = 'billing'}: {section?: 'billing'|'installments'|'pay
   }
   const expenseRows = period === 'all' ? rows : rows.filter(r=>inPeriod(String(r.date||'')));
   const total = expenseRows.reduce((sum,r)=>sum+Number(r.amount||0),0);
-  const paymentRows = bills.flatMap(r=>(r.payments||[]).map((p:any)=>({...p,guest:r.guest})));
-  const paymentsInPeriod = period === 'all'
+  const paymentRows = bills.flatMap(r=>(r.payments||[]).map((p:any)=>({
+    ...p,
+    guest:r.guest,
+    room:r.room,
+    effectiveDate:String(p.effectiveDate||p.date||'')
+  })));
+  // Future-effective payments are shown separately until their effective date.
+  const advancedPayments = paymentRows
+    .filter(p=>Boolean(p.effectiveDate) && p.effectiveDate > today)
+    .sort((a,b)=>String(a.effectiveDate).localeCompare(String(b.effectiveDate)));
+  const paymentsInPeriod = (period === 'all'
     ? paymentRows
-    : paymentRows.filter(p=>inPeriod(String(p.date||'')));
+    : paymentRows.filter(p=>inPeriod(String(p.date||''))))
+    .filter(p=>!(Boolean(p.effectiveDate) && p.effectiveDate > today));
   const chargesInPeriod = period === 'all' ? 0 : bills.reduce((sum,r)=>
     sum+(r.installments||[]).filter((i:any)=>inPeriod(String(i.dueDate||'')))
       .reduce((sub:number,i:any)=>sub+Number(i.charge||0),0),0);
@@ -2004,11 +2014,30 @@ function Finance({section = 'billing'}: {section?: 'billing'|'installments'|'pay
         <div className="mini-stat-grid">
           <div><span>Charges due this period</span><strong>{money(charges)}</strong></div>
           <div><span>Payments recorded this period</span><strong>{money(paid)}</strong></div>
+          <div><span>Future-effective payments</span><strong>{money(advancedPayments.reduce((sum,p)=>sum+Number(p.amount||0),0))}</strong></div>
           <div><span>Outstanding at period end</span><strong>{money(balance)}</strong></div>
           <div><span>Overdue amount at cutoff</span><strong>{money(overdueAmount)}</strong></div>
           <div><span>Overdue accounts</span><strong>{historicalBills.filter(r=>r.overdueAmount>0).length}</strong></div>
         </div>
       )}
+      <Panel title="Advanced payment" subtitle="Payments received but scheduled to take effect in the future. These are excluded from payments recorded this period and from the current outstanding-balance calculation.">
+        <div className="table-scroll">
+          <table>
+            <thead><tr><th>RESERVATION / GUEST</th><th>ROOM</th><th>RECEIPT DATE</th><th>EFFECTIVE DATE</th><th>METHOD</th><th>AMOUNT</th></tr></thead>
+            <tbody>
+              {advancedPayments.map((p:any)=><tr key={p.id}>
+                <td><strong>{p.reservationId}</strong><span className="cell-sub">{p.guest}</span></td>
+                <td>{p.room||'—'}</td>
+                <td>{p.date||'—'}</td>
+                <td>{p.effectiveDate}</td>
+                <td>{p.method||'—'}</td>
+                <td className="amount-cell">{money(p.amount)}</td>
+              </tr>)}
+              {!advancedPayments.length&&<tr><td colSpan={6}>No advanced payments scheduled for the future.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </Panel>
       <div className="notice"><AlertTriangle size={17}/><div><strong>Billing rules</strong><span>Daily stays are charged at the configured nightly rate multiplied by the number of nights, due on check-in. Monthly stays are prorated by actual calendar-month days and billed on each monthly check-in anniversary. Unpaid monthly bills have a grace period through noon on the fifth calendar day, Ho Chi Minh City time. Check-in night counts; checkout date does not. Existing reservations default to Daily, and no booking is assumed paid.</span></div></div>
       <div className="reservation-tabs billing-status-tabs" role="tablist" aria-label="Filter billing entries by status">
         {['Overdue', 'Due', 'Upcoming', 'Paid', 'Setup needed', 'All'].map(status => (
