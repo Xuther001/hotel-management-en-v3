@@ -1718,7 +1718,7 @@ function getBillingRows(d: AnyRecord) {
             monthlyFeeBreakdown: true,
             managementFee,
             waterFee,
-            electricityFee: 0
+            electricityFee: Math.max(0, Number(x.electricityFee || 0))
           };
         })
         .sort((a: AnyRecord, b: AnyRecord) =>
@@ -1727,11 +1727,40 @@ function getBillingRows(d: AnyRecord) {
           )
         );
 
+      if (rentalType === 'Monthly') {
+        for (const payment of reservationPayments) {
+          const electricityFee = Math.max(
+            0,
+            Number(payment.electricityFee || 0)
+          );
+          if (!electricityFee) continue;
+
+          const effectiveDate = String(
+            payment.effectiveDate || payment.date || ''
+          );
+          if (effectiveDate > today) continue;
+
+          const installment = monthlyInstallmentForPayment(
+            installments,
+            effectiveDate
+          );
+          if (!installment) continue;
+
+          installment.electricityCharge =
+            Number(installment.electricityCharge || 0) + electricityFee;
+          installment.charge =
+            Number(installment.charge || 0) + electricityFee;
+          installment.balance =
+            Number(installment.balance || 0) + electricityFee;
+        }
+      }
+
       // A payment reduces today's balance only on or after its effective date.
       const paid = reservationPayments.reduce(
         (sum: number, x: AnyRecord) =>
           String(x.effectiveDate || x.date || '') <= today
             ? sum + Math.max(0, Number(x.amount || 0))
+                + Math.max(0, Number(x.electricityFee || 0))
             : sum,
         0
       );
@@ -1770,7 +1799,7 @@ function getBillingRows(d: AnyRecord) {
         let remaining = Math.max(
           0,
           Number(payment.amount || 0)
-        );
+        ) + Math.max(0, Number(payment.electricityFee || 0));
 
         if (rentalType === 'Monthly') {
           const installment = monthlyInstallmentForPayment(
@@ -1850,7 +1879,9 @@ function getBillingRows(d: AnyRecord) {
         managementCharge: rentalType === 'Monthly'
           ? 300000
           : 0,
-        electricityCharge: 0,
+        electricityCharge: installments.reduce(
+          (sum, x) => sum + Number(x.electricityCharge || 0), 0
+        ),
         charge,
         totalCharge,
         paid,
@@ -2226,6 +2257,14 @@ app.patch('/api/v1/billing/payments/:paymentId', (req, res) => {
   const date = String(req.body.date || '');
   const effectiveDate = String(req.body.effectiveDate || date);
   const method = String(req.body.method || '').trim();
+  const electricityFee = Number(
+    req.body.electricityFee ?? payment.electricityFee ?? 0
+  );
+
+  if (!Number.isFinite(electricityFee) || electricityFee < 0)
+    return res.status(400).json({
+      error: 'Electricity payment must be zero or a positive amount.'
+    });
 
   if (!Number.isFinite(amount) || amount <= 0)
     return res.status(400).json({ error: 'Payment amount must be greater than zero.' });
@@ -2253,6 +2292,11 @@ app.patch('/api/v1/billing/payments/:paymentId', (req, res) => {
     (row: AnyRecord) => row.reservationId === payment.reservationId
   );
 
+  if (billingRow?.rentalType !== 'Monthly' && electricityFee > 0)
+    return res.status(400).json({
+      error: 'Electricity payment can only be added to Monthly reservations.'
+    });
+
   if (billingRow?.rentalType === 'Monthly') {
     const installment = monthlyInstallmentForPayment(
       billingRow.installments || [], effectiveDate
@@ -2278,9 +2322,29 @@ app.patch('/api/v1/billing/payments/:paymentId', (req, res) => {
         error: `Another payment already exists for the Monthly billing period starting ${installment.dueDate}. Choose a different date or edit the other payment.`
       });
 
-    if (Math.round(amount) > Number(installment.charge || 0))
+    const oldEffectiveDate = String(
+      payment.effectiveDate || payment.date || ''
+    );
+    const oldInstallment = monthlyInstallmentForPayment(
+      billingRow.installments || [], oldEffectiveDate
+    );
+    const today = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Ho_Chi_Minh'
+    }).format(new Date());
+
+    const existingElectricityInTarget =
+      oldInstallment?.dueDate === installment.dueDate
+        && oldEffectiveDate <= today
+        ? Math.max(0, Number(payment.electricityFee || 0))
+        : 0;
+    const baseInstallmentCharge = Math.max(
+      0,
+      Number(installment.charge || 0) - existingElectricityInTarget
+    );
+
+    if (Math.round(amount) > baseInstallmentCharge)
       return res.status(400).json({
-        error: `Payment cannot exceed this billing period's charge of ${Number(installment.charge || 0).toLocaleString('en-US')} VND.`
+        error: `Payment cannot exceed this billing period's base charge of ${baseInstallmentCharge.toLocaleString('en-US')} VND.`
       });
   }
 
@@ -2289,10 +2353,12 @@ app.patch('/api/v1/billing/payments/:paymentId', (req, res) => {
     date: payment.date,
     effectiveDate: payment.effectiveDate || payment.date,
     method: payment.method,
-    notes: payment.notes || ''
+    notes: payment.notes || '',
+    electricityFee: Number(payment.electricityFee || 0)
   };
 
   payment.amount = Math.round(amount);
+  payment.electricityFee = Math.round(electricityFee);
   payment.date = date;
   payment.effectiveDate = effectiveDate;
   payment.method = method;
