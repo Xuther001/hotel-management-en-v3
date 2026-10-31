@@ -770,7 +770,28 @@ function ReservationTable({ rows, compact = false, onStatusChange, onDelete, onE
   });
   const sortHeader = (column: string, label: string) => <th aria-sort={sortColumn === column ? (sortDirection === "asc" ? "ascending" : "descending") : "none"} onClick={() => { if (sortColumn === column) setSortDirection(current => current === "asc" ? "desc" : "asc"); else { setSortColumn(column); setSortDirection("asc"); } }}>{label} <span aria-hidden="true">{sortColumn === column ? (sortDirection === "asc" ? "↑" : "↓") : "↕"}</span></th>;
 
-  return <div className={`table-scroll reservation-table${compact ? " compact" : ""}`}><table>
+  return <div className={`table-scroll reservation-table${compact ? " compact" : ""}`}>
+    {!compact && <div className="reservation-mobile-sort">
+      <label>
+        <span>{isVietnamese ? "Sắp xếp theo" : "Sort by"}</span>
+        <select value={sortColumn} onChange={e => setSortColumn(e.target.value)}>
+          <option value="guest">{isVietnamese ? "Đặt phòng / Khách" : "Booking / Guest"}</option>
+          <option value="hotel">{isVietnamese ? "Khách sạn" : "Hotel"}</option>
+          <option value="room">{isVietnamese ? "Phòng" : "Room"}</option>
+          <option value="checkIn">{isVietnamese ? "Lưu trú" : "Stay"}</option>
+          <option value="length">{isVietnamese ? "Thời lượng lưu trú" : "Length of Stay"}</option>
+          <option value="status">{isVietnamese ? "Trạng thái" : "Status"}</option>
+        </select>
+      </label>
+      <label>
+        <span>{isVietnamese ? "Thứ tự" : "Order"}</span>
+        <select value={sortDirection} onChange={e => setSortDirection(e.target.value as "asc" | "desc")}>
+          <option value="asc">{isVietnamese ? "Tăng dần ↑" : "Ascending ↑"}</option>
+          <option value="desc">{isVietnamese ? "Giảm dần ↓" : "Descending ↓"}</option>
+        </select>
+      </label>
+    </div>}
+    <table>
     <thead><tr>{sortHeader("guest", isVietnamese ? "ĐẶT PHÒNG / KHÁCH" : "BOOKING / GUEST")}{sortHeader("hotel", isVietnamese ? "KHÁCH SẠN" : "HOTEL")}{sortHeader("room", isVietnamese ? "PHÒNG" : "ROOM")}{sortHeader("checkIn", isVietnamese ? "LƯU TRÚ" : "STAY")}{sortHeader("length", isVietnamese ? "THỜI LƯỢNG LƯU TRÚ" : "LENGTH OF STAY")}{sortHeader("status", isVietnamese ? "TRẠNG THÁI" : "STATUS")}{!compact && (onDelete || onEdit) && <th>ACTIONS</th>}</tr></thead>
     <tbody>{sortedRows.map(r => {
       const expired = r.checkOut < today;
