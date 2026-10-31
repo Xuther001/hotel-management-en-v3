@@ -729,14 +729,50 @@ function formatLengthOfStay(checkIn: string, checkOut: string): string {
 
 function ReservationTable({ rows, compact = false, onStatusChange, onDelete, onEdit }: { rows: AnyRow[]; compact?: boolean; onStatusChange?: (id: string, status: string) => void; onDelete?: (id: string, guest: string) => void; onEdit?: (row: AnyRow) => void }) {
   const isVietnamese = useLanguage() === "vi";
+  const [sortColumn, setSortColumn] = useState("checkIn");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   if (!rows.length) return <EmptyState title="No reservations found" text="Try changing your search or add a reservation."/>;
   const statuses = ['Confirmed', 'Arriving today', 'Checked in', 'Checked out', 'Cancelled', 'No-show'];
   const now = new Date();
   const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
+  const getStayNights = (r: AnyRow) => {
+    const start = new Date(`${r.checkIn}T00:00:00Z`).getTime();
+    const end = new Date(`${r.checkOut}T00:00:00Z`).getTime();
+    return Number.isFinite(start) && Number.isFinite(end) ? Math.max(0, Math.round((end - start) / 86400000)) : 0;
+  };
+  const getHotelName = (r: AnyRow) => r.propertyId === "hotel-a" ? "Hotel A" : r.propertyId === "hotel-b" ? "Hotel B" : (r.property || "Unknown hotel");
+  const sortedRows = [...rows].sort((a, b) => {
+    let result = 0;
+    switch (sortColumn) {
+      case "guest":
+        result = String(a.guest || "").localeCompare(String(b.guest || ""), undefined, { sensitivity: "base" });
+        if (!result) result = String(a.id || "").localeCompare(String(b.id || ""));
+        break;
+      case "hotel":
+        result = getHotelName(a).localeCompare(getHotelName(b), undefined, { numeric: true, sensitivity: "base" });
+        break;
+      case "room":
+        result = String(a.room || "").localeCompare(String(b.room || ""), undefined, { numeric: true, sensitivity: "base" });
+        break;
+      case "checkIn":
+        result = String(a.checkIn || "").localeCompare(String(b.checkIn || ""));
+        if (!result) result = String(a.checkOut || "").localeCompare(String(b.checkOut || ""));
+        break;
+      case "length":
+        result = getStayNights(a) - getStayNights(b);
+        break;
+      case "status":
+        result = String(a.status || "").localeCompare(String(b.status || ""), undefined, { sensitivity: "base" });
+        break;
+    }
+    return sortDirection === "asc" ? result : -result;
+  });
+  const sortHeader = (column: string, label: string) => <th aria-sort={sortColumn === column ? (sortDirection === "asc" ? "ascending" : "descending") : "none"} onClick={() => { if (sortColumn === column) setSortDirection(current => current === "asc" ? "desc" : "asc"); else { setSortColumn(column); setSortDirection("asc"); } }}>{label} <span aria-hidden="true">{sortColumn === column ? (sortDirection === "asc" ? "↑" : "↓") : "↕"}</span></th>;
+
   return <div className={`table-scroll reservation-table${compact ? " compact" : ""}`}><table>
-    <thead><tr><th>BOOKING / GUEST</th><th>HOTEL</th><th>ROOM</th><th>STAY</th><th>LENGTH OF STAY</th><th>STATUS</th>{!compact && (onDelete || onEdit) && <th>ACTIONS</th>}</tr></thead>
-    <tbody>{rows.map(r => {
+    <thead><tr>{sortHeader("guest", isVietnamese ? "ĐẶT PHÒNG / KHÁCH" : "BOOKING / GUEST")}{sortHeader("hotel", isVietnamese ? "KHÁCH SẠN" : "HOTEL")}{sortHeader("room", isVietnamese ? "PHÒNG" : "ROOM")}{sortHeader("checkIn", isVietnamese ? "LƯU TRÚ" : "STAY")}{sortHeader("length", isVietnamese ? "THỜI LƯỢNG LƯU TRÚ" : "LENGTH OF STAY")}{sortHeader("status", isVietnamese ? "TRẠNG THÁI" : "STATUS")}{!compact && (onDelete || onEdit) && <th>ACTIONS</th>}</tr></thead>
+    <tbody>{sortedRows.map(r => {
       const expired = r.checkOut < today;
       return <tr key={r.id}>
         <td data-label={isVietnamese ? "KHÁCH" : "GUEST"}>
