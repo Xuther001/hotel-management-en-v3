@@ -1916,8 +1916,14 @@ function Finance({section = 'billing', property = 'all', userId}: {section?: 'bi
   const [configRentalType,setConfigRentalType] = useState<'Daily'|'Monthly'>('Daily');
   const [selectedPayment,setSelectedPayment] = useState<AnyRow|null>(null);
   const [error,setError] = useState('');
-  const [period,setPeriod] = useState(() => new Date().toISOString().slice(0,7));
-  const today = new Date().toISOString().slice(0,10);
+  const vietnamToday = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(new Date());
+  const [period,setPeriod] = useState(() => vietnamToday.slice(0,7));
+  const today = vietnamToday;
   useEffect(() => { setBillingPage(1); }, [period, billingStatusFilter, property, billingSortColumn, billingSortDirection]);
   useLayoutEffect(() => {
     if (billingTableScreenPosition.current === null) return;
