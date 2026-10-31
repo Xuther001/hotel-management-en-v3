@@ -2246,6 +2246,26 @@ app.post('/api/v1/billing/payments', (req, res) => {
     (row: AnyRecord) => row.reservationId === reservationId
   );
 
+  if (billingRow?.rentalType === 'Daily') {
+    if (Number(billingRow.balance || 0) <= 0)
+      return res.status(400).json({
+        error: 'This reservation is already fully paid. No additional payment is due.'
+      });
+
+    const duplicate = (Array.isArray(d.payments) ? d.payments : []).some(
+      (existing: AnyRecord) => existing.reservationId === reservationId
+    );
+    if (duplicate)
+      return res.status(400).json({
+        error: 'A payment already exists for this Daily reservation. Edit the existing payment instead.'
+      });
+
+    if (Math.round(amount) > Number(billingRow.balance || 0))
+      return res.status(400).json({
+        error: `Payment cannot exceed the outstanding balance of ${Number(billingRow.balance || 0).toLocaleString('en-US')} VND.`
+      });
+  }
+
   if (billingRow?.rentalType === 'Monthly') {
     const parsedDate = new Date(`${paymentDate}T00:00:00.000Z`);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(paymentDate)
@@ -2271,14 +2291,19 @@ app.post('/api/v1/billing/payments', (req, res) => {
         return existingInstallment?.dueDate === installment.dueDate;
       }
     );
+    if (Number(installment.balance || 0) <= 0)
+      return res.status(400).json({
+        error: `The Monthly billing period starting ${installment.dueDate} is already fully paid.`
+      });
+
     if (duplicate)
       return res.status(400).json({
         error: `A payment already exists for the Monthly billing period starting ${installment.dueDate}. Edit that payment to change its amount.`
       });
 
-    if (Math.round(amount) > Number(installment.charge || 0))
+    if (Math.round(amount) > Number(installment.balance || 0))
       return res.status(400).json({
-        error: `Payment cannot exceed this billing period's charge of ${Number(installment.charge || 0).toLocaleString('en-US')} VND.`
+        error: `Payment cannot exceed this billing period's outstanding balance of ${Number(installment.balance || 0).toLocaleString('en-US')} VND.`
       });
   }
 
