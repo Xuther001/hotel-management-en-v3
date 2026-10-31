@@ -678,7 +678,7 @@ function Dashboard({ property }: { property: string }) {
             </select>
           </div>
           {filteredActivities.length > 0
-            ? <div className="activity-list">{filteredActivities.map((a: AnyRow) => <div className="activity-item" key={a.id}><div className="activity-dot"><CheckCircle2 size={16}/></div><div className="activity-content"><strong>{a.text}</strong>{Array.isArray(a.details) && a.details.length > 0 && <div className="activity-details">{a.details.map((change: AnyRow, index: number) => <div className="activity-change" key={`${a.id}-${index}`}><strong>{change.field}:</strong> <span>{change.from} → {change.to}</span></div>)}</div>}<span className="activity-by">{a.by}</span></div><time>{a.time}</time></div>)}</div>
+            ? <div className="activity-list">{filteredActivities.map((a: AnyRow) => <div className="activity-item" key={a.id}><div className="activity-dot"><CheckCircle2 size={16}/></div><div className="activity-content"><strong>{a.text}</strong>{Array.isArray(a.details) && a.details.length > 0 && <div className="activity-details">{a.details.map((change: AnyRow, index: number) => <div className="activity-change" key={`${a.id}-${index}`}><strong>{change.field}:</strong> <span>{change.from} → {change.to}</span></div>)}</div>}<span className="activity-by">{a.by}</span></div><time>{getActivityDate(a)?.toLocaleString(undefined, { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) || a.time}</time></div>)}</div>
             : <div className="activity-filter-empty">No activity recorded for this month.</div>}
         </>;
       })()}
