@@ -258,16 +258,16 @@ function AuthenticatedApp({ user, onLogout }: { user: AuthUser; onLogout: () => 
       <header className="topbar"><div className="top-left"><button className="icon-button mobile-menu" onClick={() => setSidebarOpen(true)}><Menu size={20}/></button><div className="breadcrumbs">Workspace <span>/</span> <strong>{pageTitle}</strong></div></div><div className="top-actions"><label className="property-filter"><Building2 size={16}/><select value={property} onChange={e => setProperty(e.target.value)}><option value="all">All hotels</option>{properties.map(p => <option value={p.id} key={p.id}>{p.name}</option>)}</select><ChevronDown size={14}/></label><button className="icon-button top-search" onClick={() => document.getElementById('global-search')?.focus()} title="Search"><Search size={18}/></button><button className="icon-button notification" title="Notifications" onClick={() => alert('Demo notifications: 3 maintenance tasks and 2 contract renewals require attention.')}><Bell size={18}/><i/></button><div className="top-divider"/><div className="top-user"><div className="avatar">{user.name.slice(0, 2).toUpperCase()}</div><div><strong>{user.name}</strong><span>{user.role}</span></div><ChevronDown size={14}/></div></div></header>
       <div className="page-wrap"><Routes>
         <Route path="/" element={<Dashboard property={property}/>} />
-        <Route path="/reservations" element={<Reservations property={property} onReservationCountChange={refreshReservationCount} />} />
+        <Route path="/reservations" element={<Reservations property={property} userId={user.id} onReservationCountChange={refreshReservationCount} />} />
         <Route path="/reservation-calendar" element={<ReservationCalendar property={property} />} />
         <Route path="/rooms" element={<Rooms property={property} isAdmin={user.role === 'Admin'}/>} />
         <Route path="/employees" element={<Employees />} />
         <Route path="/finance" element={<Navigate to="/finance/billing" replace />} />
-        <Route path="/finance/billing" element={<Finance section="billing" />} />
-        <Route path="/finance/installments" element={<Finance section="installments" property={property} />} />
-        <Route path="/finance/daily" element={<Finance section="daily" property={property} />} />
-        <Route path="/finance/payments" element={<Finance section="payments" />} />
-        <Route path="/finance/expenses" element={<Finance section="expenses" />} />
+        <Route path="/finance/billing" element={<Finance section="billing" userId={user.id} />} />
+        <Route path="/finance/installments" element={<Finance section="installments" property={property} userId={user.id} />} />
+        <Route path="/finance/daily" element={<Finance section="daily" property={property} userId={user.id} />} />
+        <Route path="/finance/payments" element={<Finance section="payments" userId={user.id} />} />
+        <Route path="/finance/expenses" element={<Finance section="expenses" userId={user.id} />} />
         <Route path="/inventory" element={<ComingSoon title="Inventory management" description="Track supplies, stock levels, purchase orders, and transfers between your properties." icon={<Package/>}/>} />
         <Route path="/maintenance" element={<Maintenance />} />
 
@@ -727,10 +727,19 @@ function formatLengthOfStay(checkIn: string, checkOut: string): string {
   return `${nights} ${isVietnamese ? 'đêm' : (nights === 1 ? 'night' : 'nights')}`;
 }
 
-function ReservationTable({ rows, compact = false, onStatusChange, onDelete, onEdit }: { rows: AnyRow[]; compact?: boolean; onStatusChange?: (id: string, status: string) => void; onDelete?: (id: string, guest: string) => void; onEdit?: (row: AnyRow) => void }) {
+function ReservationTable({ rows, compact = false, onStatusChange, onDelete, onEdit, savedSortColumn, savedSortDirection, onSortChange }: { rows: AnyRow[]; compact?: boolean; onStatusChange?: (id: string, status: string) => void; onDelete?: (id: string, guest: string) => void; onEdit?: (row: AnyRow) => void; savedSortColumn?: string; savedSortDirection?: "asc" | "desc"; onSortChange?: (column: string, direction: "asc" | "desc") => void }) {
   const isVietnamese = useLanguage() === "vi";
-  const [sortColumn, setSortColumn] = useState("checkIn");
-  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  const [localSortColumn, setLocalSortColumn] = useState("checkIn");
+  const [localSortDirection, setLocalSortDirection] = useState<"asc" | "desc">("asc");
+  const sortColumn = savedSortColumn ?? localSortColumn;
+  const sortDirection = savedSortDirection ?? localSortDirection;
+  const changeSort = (column: string, direction: "asc" | "desc") => {
+    if (onSortChange) onSortChange(column, direction);
+    else {
+      setLocalSortColumn(column);
+      setLocalSortDirection(direction);
+    }
+  };
   if (!rows.length) return <EmptyState title="No reservations found" text="Try changing your search or add a reservation."/>;
   const statuses = ['Confirmed', 'Arriving today', 'Checked in', 'Checked out', 'Cancelled', 'No-show'];
   const now = new Date();
@@ -770,13 +779,13 @@ function ReservationTable({ rows, compact = false, onStatusChange, onDelete, onE
     }
     return sortDirection === "asc" ? result : -result;
   });
-  const sortHeader = (column: string, label: string) => <th aria-sort={sortColumn === column ? (sortDirection === "asc" ? "ascending" : "descending") : "none"} onClick={() => { if (sortColumn === column) setSortDirection(current => current === "asc" ? "desc" : "asc"); else { setSortColumn(column); setSortDirection("asc"); } }}>{label} <span aria-hidden="true">{sortColumn === column ? (sortDirection === "asc" ? "↑" : "↓") : "↕"}</span></th>;
+  const sortHeader = (column: string, label: string) => <th aria-sort={sortColumn === column ? (sortDirection === "asc" ? "ascending" : "descending") : "none"} onClick={() => changeSort(column, sortColumn === column ? (sortDirection === "asc" ? "desc" : "asc") : "asc")}>{label} <span aria-hidden="true">{sortColumn === column ? (sortDirection === "asc" ? "↑" : "↓") : "↕"}</span></th>;
 
   return <div className={`table-scroll reservation-table${compact ? " compact" : ""}`}>
     {!compact && <div className="reservation-mobile-sort">
       <label>
         <span>{isVietnamese ? "Sắp xếp theo" : "Sort by"}</span>
-        <select value={sortColumn} onChange={e => setSortColumn(e.target.value)}>
+        <select value={sortColumn} onChange={e => changeSort(e.target.value, "asc")}>
           <option value="guest">{isVietnamese ? "Khách" : "Guest"}</option>
           <option value="reservation">{isVietnamese ? "Mã đặt phòng" : "Reservation"}</option>
           <option value="hotel">{isVietnamese ? "Khách sạn" : "Hotel"}</option>
@@ -788,7 +797,7 @@ function ReservationTable({ rows, compact = false, onStatusChange, onDelete, onE
       </label>
       <label>
         <span>{isVietnamese ? "Thứ tự" : "Order"}</span>
-        <select value={sortDirection} onChange={e => setSortDirection(e.target.value as "asc" | "desc")}>
+        <select value={sortDirection} onChange={e => changeSort(sortColumn, e.target.value as "asc" | "desc")}>
           <option value="asc">{isVietnamese ? "Tăng dần ↑" : "Ascending ↑"}</option>
           <option value="desc">{isVietnamese ? "Giảm dần ↓" : "Descending ↓"}</option>
         </select>
@@ -1101,7 +1110,7 @@ function ReservationCalendar({ property }: { property: string }) {
   </>;
 }
 
-function Reservations({ property, onReservationCountChange }: { property: string; onReservationCountChange: () => Promise<void> }) {
+function Reservations({ property, userId, onReservationCountChange }: { property: string; userId: string; onReservationCountChange: () => Promise<void> }) {
   const [rows, setRows] = useState<AnyRow[]>([]);
   const [query, setQuery] = useState('');
   const [reservationTab, setReservationTab] = useState<'active' | 'inactive'>('active');
@@ -1111,6 +1120,26 @@ function Reservations({ property, onReservationCountChange }: { property: string
   const reservationScrollPosition = useRef({ x: 0, y: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [reservationSort, setReservationSort] = useState({ column: 'checkIn', direction: 'asc' as 'asc' | 'desc' });
+  const [reservationSortLoaded, setReservationSortLoaded] = useState(false);
+  useEffect(() => {
+    let active = true;
+    setReservationSortLoaded(false);
+    api.sortPreferences()
+      .then((r: any) => {
+        if (active && r.data?.reservations) setReservationSort(r.data.reservations);
+      })
+      .catch(() => {})
+      .finally(() => { if (active) setReservationSortLoaded(true); });
+    return () => { active = false; };
+  }, [userId]);
+  const changeReservationSort = (column: string, direction: 'asc' | 'desc') => {
+    const next = { column, direction };
+    setReservationSort(next);
+    if (reservationSortLoaded) {
+      api.updateSortPreferences({ reservations: next }).catch(() => {});
+    }
+  };
   const today = (() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -1327,7 +1356,7 @@ function Reservations({ property, onReservationCountChange }: { property: string
     return Number(b) - Number(a);
   });
 
-  return <><PageHeader eyebrow="HOTEL OPERATIONS" title="Reservations" description="Manage guest bookings, stay dates, and booking status." actions={<Button onClick={startCreating}><Plus size={16}/> New reservation</Button>}/><div className="toolbar"><SearchBar value={query} onChange={setQuery} placeholder="Search guest, booking ID, source…"/><div className="toolbar-right"><Badge tone="info">{visibleRows.length} bookings</Badge><Button variant="secondary" onClick={load}><RefreshCw size={15}/> Refresh</Button></div></div>{error && <div className="notice error">{error}</div>}<div className="reservation-tabs" role="tablist" aria-label="Reservation status"><Button variant={reservationTab === 'active' ? 'primary' : 'secondary'} onClick={() => setReservationTab('active')}>Active Reservations</Button><Button variant={reservationTab === 'inactive' ? 'primary' : 'secondary'} onClick={() => setReservationTab('inactive')}>Inactive Reservations</Button></div><Panel title={reservationTab === 'active' ? 'Active reservations' : 'Inactive reservations'} subtitle={reservationTab === 'active' ? 'Confirmed bookings, arrivals, and current stays' : 'Archived by year — checked-out stays use checkout year; cancelled and no-show bookings use check-in year'}>{loading ? <div className="loading">Loading reservations…</div> : reservationTab === 'active' ? <ReservationTable rows={visibleRows} onStatusChange={changeReservationStatus} onDelete={deleteReservation} onEdit={startEditing}/> : inactiveYearGroups.length === 0 ? <ReservationTable rows={visibleRows} onDelete={deleteReservation} onEdit={startEditing}/> : <div className="reservation-year-list">{inactiveYearGroups.map(([year, yearRows], index) => { const expanded = expandedReservationYears[year] ?? index === 0; return <section className="reservation-year-group" key={year}><button type="button" className="reservation-year-toggle" aria-expanded={expanded} onClick={() => setExpandedReservationYears(current => ({ ...current, [year]: !expanded }))}><span className="reservation-year-label"><strong>{year}</strong><span>{yearRows.length} {yearRows.length === 1 ? 'reservation' : 'reservations'}</span></span><span className="reservation-year-chevron" aria-hidden="true">{expanded ? '−' : '+'}</span></button>{expanded && <div className="reservation-year-content"><ReservationTable rows={yearRows} onDelete={deleteReservation} onEdit={startEditing}/></div>}</section>; })}</div>}</Panel>{open && <Modal title={editingReservation ? 'Edit reservation' : 'Create reservation'} onClose={() => { setOpen(false); setEditingReservation(null); }}><form key={editingReservation?.id || 'new-reservation'} className="form-grid" onSubmit={submit}><label className="span-2">Guest full name<input name="guest" required defaultValue={editingReservation?.guest || ''} placeholder="Enter guest name"/></label><label>Hotel<select name="propertyId" value={selectedProperty} onChange={e => { setSelectedProperty(e.target.value); setSelectedRoom(""); }}><option value="hotel-a">Hotel A</option><option value="hotel-b">Hotel B</option></select></label><label>Room number<select name="room" required value={selectedRoom} onChange={e => setSelectedRoom(e.target.value)}><option value="">Select an available room</option>{roomOptions.map((room: AnyRow) => <option key={room.id} value={room.number}>{room.number} · {room.type} · Floor {room.floor}</option>)}</select>{roomOptions.length === 0 && <small>No rooms available for these dates.</small>}</label><label>Check-in<input type="date" name="checkIn" required min={editingReservation ? undefined : new Date(Date.parse(`${today}T00:00:00Z`) - 86400000).toISOString().slice(0, 10)} value={checkInDate} onChange={e => setCheckInDate(e.target.value)} /></label><label>Check-out<input type="date" name="checkOut" required min={checkInDate || undefined} value={checkOutDate} onChange={e => setCheckOutDate(e.target.value)} /></label><label>Guest(s)<input type="number" name="guests" min="1" step="1" required defaultValue={editingReservation?.guests ?? ''}/></label><label className="span-2">Booking source<select name="source" defaultValue={editingReservation?.source || 'Direct'}><option>Direct</option><option>Phone</option><option>Walk-in</option><option>Booking.com</option><option>Agoda</option><option>Travel agent</option></select></label><label className="span-2">Reservation note<textarea name="note" rows={3} maxLength={2000} defaultValue={editingReservation?.note || ''} placeholder="Optional note for this reservation only"/></label><div className="form-actions span-2"><Button variant="secondary" onClick={() => { setOpen(false); setEditingReservation(null); }}>Cancel</Button><Button type="submit">{editingReservation ? 'Save changes' : 'Create reservation'}</Button></div></form></Modal>}</>;
+  return <><PageHeader eyebrow="HOTEL OPERATIONS" title="Reservations" description="Manage guest bookings, stay dates, and booking status." actions={<Button onClick={startCreating}><Plus size={16}/> New reservation</Button>}/><div className="toolbar"><SearchBar value={query} onChange={setQuery} placeholder="Search guest, booking ID, source…"/><div className="toolbar-right"><Badge tone="info">{visibleRows.length} bookings</Badge><Button variant="secondary" onClick={load}><RefreshCw size={15}/> Refresh</Button></div></div>{error && <div className="notice error">{error}</div>}<div className="reservation-tabs" role="tablist" aria-label="Reservation status"><Button variant={reservationTab === 'active' ? 'primary' : 'secondary'} onClick={() => setReservationTab('active')}>Active Reservations</Button><Button variant={reservationTab === 'inactive' ? 'primary' : 'secondary'} onClick={() => setReservationTab('inactive')}>Inactive Reservations</Button></div><Panel title={reservationTab === 'active' ? 'Active reservations' : 'Inactive reservations'} subtitle={reservationTab === 'active' ? 'Confirmed bookings, arrivals, and current stays' : 'Archived by year — checked-out stays use checkout year; cancelled and no-show bookings use check-in year'}>{loading ? <div className="loading">Loading reservations…</div> : reservationTab === 'active' ? <ReservationTable rows={visibleRows} savedSortColumn={reservationSort.column} savedSortDirection={reservationSort.direction} onSortChange={changeReservationSort} onStatusChange={changeReservationStatus} onDelete={deleteReservation} onEdit={startEditing}/> : inactiveYearGroups.length === 0 ? <ReservationTable rows={visibleRows} savedSortColumn={reservationSort.column} savedSortDirection={reservationSort.direction} onSortChange={changeReservationSort} onDelete={deleteReservation} onEdit={startEditing}/> : <div className="reservation-year-list">{inactiveYearGroups.map(([year, yearRows], index) => { const expanded = expandedReservationYears[year] ?? index === 0; return <section className="reservation-year-group" key={year}><button type="button" className="reservation-year-toggle" aria-expanded={expanded} onClick={() => setExpandedReservationYears(current => ({ ...current, [year]: !expanded }))}><span className="reservation-year-label"><strong>{year}</strong><span>{yearRows.length} {yearRows.length === 1 ? 'reservation' : 'reservations'}</span></span><span className="reservation-year-chevron" aria-hidden="true">{expanded ? '−' : '+'}</span></button>{expanded && <div className="reservation-year-content"><ReservationTable rows={yearRows} savedSortColumn={reservationSort.column} savedSortDirection={reservationSort.direction} onSortChange={changeReservationSort} onDelete={deleteReservation} onEdit={startEditing}/></div>}</section>; })}</div>}</Panel>{open && <Modal title={editingReservation ? 'Edit reservation' : 'Create reservation'} onClose={() => { setOpen(false); setEditingReservation(null); }}><form key={editingReservation?.id || 'new-reservation'} className="form-grid" onSubmit={submit}><label className="span-2">Guest full name<input name="guest" required defaultValue={editingReservation?.guest || ''} placeholder="Enter guest name"/></label><label>Hotel<select name="propertyId" value={selectedProperty} onChange={e => { setSelectedProperty(e.target.value); setSelectedRoom(""); }}><option value="hotel-a">Hotel A</option><option value="hotel-b">Hotel B</option></select></label><label>Room number<select name="room" required value={selectedRoom} onChange={e => setSelectedRoom(e.target.value)}><option value="">Select an available room</option>{roomOptions.map((room: AnyRow) => <option key={room.id} value={room.number}>{room.number} · {room.type} · Floor {room.floor}</option>)}</select>{roomOptions.length === 0 && <small>No rooms available for these dates.</small>}</label><label>Check-in<input type="date" name="checkIn" required min={editingReservation ? undefined : new Date(Date.parse(`${today}T00:00:00Z`) - 86400000).toISOString().slice(0, 10)} value={checkInDate} onChange={e => setCheckInDate(e.target.value)} /></label><label>Check-out<input type="date" name="checkOut" required min={checkInDate || undefined} value={checkOutDate} onChange={e => setCheckOutDate(e.target.value)} /></label><label>Guest(s)<input type="number" name="guests" min="1" step="1" required defaultValue={editingReservation?.guests ?? ''}/></label><label className="span-2">Booking source<select name="source" defaultValue={editingReservation?.source || 'Direct'}><option>Direct</option><option>Phone</option><option>Walk-in</option><option>Booking.com</option><option>Agoda</option><option>Travel agent</option></select></label><label className="span-2">Reservation note<textarea name="note" rows={3} maxLength={2000} defaultValue={editingReservation?.note || ''} placeholder="Optional note for this reservation only"/></label><div className="form-actions span-2"><Button variant="secondary" onClick={() => { setOpen(false); setEditingReservation(null); }}>Cancel</Button><Button type="submit">{editingReservation ? 'Save changes' : 'Create reservation'}</Button></div></form></Modal>}</>;
 }
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
@@ -1801,7 +1830,7 @@ function Employees() {
   }
   return <><PageHeader eyebrow="PEOPLE & CULTURE" title="Human resources" description="Employee directory and staffing overview." actions={<Button onClick={() => setOpen(true)}><Plus size={16}/> Add employee</Button>}/><div className="mini-stat-grid"><div><span>Total employees</span><strong>{rows.length}</strong></div><div><span>On shift</span><strong>{rows.filter(r=>r.status==='On shift').length}</strong></div><div><span>Departments</span><strong>{new Set(rows.map(r=>r.department)).size}</strong></div><div><span>Monthly base salaries</span><strong>{money(rows.reduce((s,r)=>s+Number(r.salary||0),0))}</strong></div></div><div className="toolbar"><SearchBar value={query} onChange={setQuery} placeholder={isVietnamese ? "Tìm nhân viên, chức vụ, phòng ban…" : "Search employees, roles, departments…"}/></div><Panel title="Employee directory" subtitle="Demo records; salary data is shown for prototyping only"><div className="table-scroll"><table><thead><tr><th>EMPLOYEE</th><th>ROLE / DEPARTMENT</th><th>PROPERTY</th><th>STATUS</th><th>MONTHLY BASE</th><th>ACTIONS</th></tr></thead><tbody>{rows.map(r=><tr key={r.id}><td><div className="employee-cell"><div className="avatar">{r.name.split(' ').slice(-1)[0].slice(0,1)}{r.name.split(' ')[0].slice(0,1)}</div><div><strong>{r.name}</strong><span className="cell-sub">{r.id}</span></div></div></td><td><strong>{r.jobTitle}</strong><span className="cell-sub">{r.department}</span></td><td>{r.property}</td><td><Badge tone={r.status==='On shift'?'success':'neutral'}>{r.status}</Badge></td><td className="amount-cell">{money(r.salary)}</td><td><Button variant="secondary" onClick={() => deleteEmployee(r)}>Delete</Button></td></tr>)}</tbody></table></div></Panel>{open && <Modal title="Add employee" onClose={() => setOpen(false)}><form className="form-grid" onSubmit={submit}><label className="span-2">Full name<input name="name" required placeholder="Employee full name"/></label><label>Department<select name="department" value={department} onChange={e => setDepartment(e.target.value)} required><option value="">Select department</option><option value="Front Office">Front Office</option><option value="Housekeeping">Housekeeping</option><option value="Management">Management</option><option value="Finance">Finance</option></select></label><label>Job title<select name="jobTitle" value={department ? jobTitleByDepartment[department] : ""} required disabled={!department}><option value="">Select department first</option>{department && <option value={jobTitleByDepartment[department]}>{jobTitleByDepartment[department]}</option>}</select></label><label>Property<select name="property"><option>Hotel A</option><option>Hotel B</option><option>Group</option></select></label><label>Monthly base salary (VND)<input type="number" name="salary" min="0" defaultValue="9000000"/></label><div className="form-actions span-2"><Button variant="secondary" onClick={() => setOpen(false)}>Cancel</Button><Button type="submit">Save employee</Button></div></form></Modal>}</>;
 }
-function Finance({section = 'billing', property = 'all'}: {section?: 'billing'|'installments'|'daily'|'payments'|'expenses'; property?: string}) {
+function Finance({section = 'billing', property = 'all', userId}: {section?: 'billing'|'installments'|'daily'|'payments'|'expenses'; property?: string; userId: string}) {
   const isVietnamese = useLanguage() === 'vi';
   const [rows,setRows] = useState<AnyRow[]>([]);
   const [bills,setBills] = useState<AnyRow[]>([]);
@@ -1819,6 +1848,60 @@ function Finance({section = 'billing', property = 'all'}: {section?: 'billing'|'
   const [dailySortDirection, setDailySortDirection] = useState<'asc'|'desc'>('asc');
   const [paymentSortColumn, setPaymentSortColumn] = useState('date');
   const [paymentSortDirection, setPaymentSortDirection] = useState<'asc'|'desc'>('desc');
+  const [sortPreferencesLoaded, setSortPreferencesLoaded] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    setSortPreferencesLoaded(false);
+    api.sortPreferences()
+      .then((r: any) => {
+        if (!active || !r.data) return;
+        if (r.data.billing) {
+          setBillingSortColumn(r.data.billing.column);
+          setBillingSortDirection(r.data.billing.direction);
+        }
+        if (r.data.installments) {
+          setInstallmentSortColumn(r.data.installments.column);
+          setInstallmentSortDirection(r.data.installments.direction);
+        }
+        if (r.data.daily) {
+          setDailySortColumn(r.data.daily.column);
+          setDailySortDirection(r.data.daily.direction);
+        }
+        if (r.data.payments) {
+          setPaymentSortColumn(r.data.payments.column);
+          setPaymentSortDirection(r.data.payments.direction);
+        }
+      })
+      .catch(() => {})
+      .finally(() => { if (active) setSortPreferencesLoaded(true); });
+    return () => { active = false; };
+  }, [userId]);
+
+  const updateFinanceSort = (
+    table: 'billing'|'installments'|'daily'|'payments',
+    column: string,
+    direction: 'asc'|'desc'
+  ) => {
+    if (table === 'billing') {
+      setBillingSortColumn(column);
+      setBillingSortDirection(direction);
+    } else if (table === 'installments') {
+      setInstallmentSortColumn(column);
+      setInstallmentSortDirection(direction);
+    } else if (table === 'daily') {
+      setDailySortColumn(column);
+      setDailySortDirection(direction);
+    } else {
+      setPaymentSortColumn(column);
+      setPaymentSortDirection(direction);
+    }
+
+    if (sortPreferencesLoaded) {
+      api.updateSortPreferences({ [table]: { column, direction } }).catch(() => {});
+    }
+  };
+
   const [billingPage, setBillingPage] = useState(1);
   const billingRegisterRef = useRef<HTMLDivElement | null>(null);
   const billingTableScreenPosition = useRef<number | null>(null);
@@ -2357,14 +2440,7 @@ function Finance({section = 'billing', property = 'all'}: {section?: 'billing'|'
   const billingSortHeader = (column: string, label: string) => (
     <th
       aria-sort={billingSortColumn === column ? (billingSortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
-      onClick={() => {
-        if (billingSortColumn === column) {
-          setBillingSortDirection(current => current === 'asc' ? 'desc' : 'asc');
-        } else {
-          setBillingSortColumn(column);
-          setBillingSortDirection('asc');
-        }
-      }}
+      onClick={() => updateFinanceSort('billing', column, billingSortColumn === column ? (billingSortDirection === 'asc' ? 'desc' : 'asc') : 'asc')}
     >
       {label} <span aria-hidden="true">{billingSortColumn === column ? (billingSortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
     </th>
@@ -2373,14 +2449,7 @@ function Finance({section = 'billing', property = 'all'}: {section?: 'billing'|'
   const installmentSortHeader = (column: string, label: string) => (
     <th
       aria-sort={installmentSortColumn === column ? (installmentSortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
-      onClick={() => {
-        if (installmentSortColumn === column) {
-          setInstallmentSortDirection(current => current === 'asc' ? 'desc' : 'asc');
-        } else {
-          setInstallmentSortColumn(column);
-          setInstallmentSortDirection('asc');
-        }
-      }}
+      onClick={() => updateFinanceSort('installments', column, installmentSortColumn === column ? (installmentSortDirection === 'asc' ? 'desc' : 'asc') : 'asc')}
     >
       {label} <span aria-hidden="true">{installmentSortColumn === column ? (installmentSortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
     </th>
@@ -2389,14 +2458,7 @@ function Finance({section = 'billing', property = 'all'}: {section?: 'billing'|'
   const dailySortHeader = (column: string, label: string) => (
     <th
       aria-sort={dailySortColumn === column ? (dailySortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
-      onClick={() => {
-        if (dailySortColumn === column) {
-          setDailySortDirection(current => current === 'asc' ? 'desc' : 'asc');
-        } else {
-          setDailySortColumn(column);
-          setDailySortDirection('asc');
-        }
-      }}
+      onClick={() => updateFinanceSort('daily', column, dailySortColumn === column ? (dailySortDirection === 'asc' ? 'desc' : 'asc') : 'asc')}
     >
       {label} <span aria-hidden="true">{dailySortColumn === column ? (dailySortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
     </th>
@@ -2405,14 +2467,7 @@ function Finance({section = 'billing', property = 'all'}: {section?: 'billing'|'
   const paymentSortHeader = (column: string, label: string) => (
     <th
       aria-sort={paymentSortColumn === column ? (paymentSortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
-      onClick={() => {
-        if (paymentSortColumn === column) {
-          setPaymentSortDirection(current => current === 'asc' ? 'desc' : 'asc');
-        } else {
-          setPaymentSortColumn(column);
-          setPaymentSortDirection(column === 'date' ? 'desc' : 'asc');
-        }
-      }}
+      onClick={() => updateFinanceSort('payments', column, paymentSortColumn === column ? (paymentSortDirection === 'asc' ? 'desc' : 'asc') : (column === 'date' ? 'desc' : 'asc'))}
     >
       {label} <span aria-hidden="true">{paymentSortColumn === column ? (paymentSortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
     </th>
@@ -2585,7 +2640,7 @@ function Finance({section = 'billing', property = 'all'}: {section?: 'billing'|'
         <div className="billing-mobile-sort">
           <label>
             <span>{isVietnamese ? "Sắp xếp theo" : "Sort by"}</span>
-            <select value={billingSortColumn} onChange={e => setBillingSortColumn(e.target.value)}>
+            <select value={billingSortColumn} onChange={e => updateFinanceSort('billing', e.target.value, billingSortDirection)}>
               <option value="reservation">{isVietnamese ? "Mã đặt phòng" : "Reservation"}</option>
               <option value="guest">{isVietnamese ? "Tên khách" : "Guest"}</option>
               <option value="room">{isVietnamese ? "Phòng" : "Room"}</option>
@@ -2604,7 +2659,7 @@ function Finance({section = 'billing', property = 'all'}: {section?: 'billing'|'
           </label>
           <label>
             <span>{isVietnamese ? "Thứ tự" : "Order"}</span>
-            <select value={billingSortDirection} onChange={e => setBillingSortDirection(e.target.value as 'asc'|'desc')}>
+            <select value={billingSortDirection} onChange={e => updateFinanceSort('billing', billingSortColumn, e.target.value as 'asc'|'desc')}>
               <option value="asc">{isVietnamese ? "Tăng dần" : "Ascending"}</option>
               <option value="desc">{isVietnamese ? "Giảm dần" : "Descending"}</option>
             </select>
@@ -2637,10 +2692,10 @@ function Finance({section = 'billing', property = 'all'}: {section?: 'billing'|'
       </>}
       {section==='installments' && <Panel title="Monthly installment breakdown" subtitle="Each monthly billing period is charged at the full monthly rate, including the final partial period. Monthly payments are allocated to the anniversary-based period matching the payment date."><div className="installment-mobile-sort">
         <label>{isVietnamese ? "Sắp xếp theo" : "Sort by"}
-          <select value={installmentSortColumn} onChange={e => setInstallmentSortColumn(e.target.value)}>
+          <select value={installmentSortColumn} onChange={e => updateFinanceSort('installments', e.target.value, installmentSortDirection)}>
             <option value="dueDate">{isVietnamese ? "Ngày đến hạn" : "Due date"}</option>
-            <option value="reservationNumber">{isVietnamese ? "Mã đặt phòng" : "Reservation number"}</option>
-            <option value="guest">{isVietnamese ? "Tên khách" : "Guest name"}</option>
+            <option value="reservationNumber">{isVietnamese ? "Mã đặt phòng" : "Reservation"}</option>
+            <option value="guest">{isVietnamese ? "Tên khách" : "Guest"}</option>
             <option value="room">{isVietnamese ? "Phòng" : "Room"}</option>
             <option value="charge">{isVietnamese ? "Khoản thu" : "Charge"}</option>
             <option value="paid">{isVietnamese ? "Đã phân bổ" : "Allocated paid"}</option>
@@ -2649,7 +2704,7 @@ function Finance({section = 'billing', property = 'all'}: {section?: 'billing'|'
           </select>
         </label>
         <label>{isVietnamese ? "Thứ tự" : "Order"}
-          <select value={installmentSortDirection} onChange={e => setInstallmentSortDirection(e.target.value as 'asc'|'desc')}>
+          <select value={installmentSortDirection} onChange={e => updateFinanceSort('installments', installmentSortColumn, e.target.value as 'asc'|'desc')}>
             <option value="asc">{isVietnamese ? "Tăng dần" : "Ascending"}</option>
             <option value="desc">{isVietnamese ? "Giảm dần" : "Descending"}</option>
           </select>
@@ -2660,10 +2715,10 @@ function Finance({section = 'billing', property = 'all'}: {section?: 'billing'|'
       </tbody><tfoot><tr className="installment-total-row"><td><strong>TOTAL</strong></td><td><strong>{monthlyInstallments.length} installments</strong></td><td>—</td><td>—</td><td className="amount-cell"><strong>{money(monthlyInstallments.reduce((sum,i)=>sum+Number(i.charge||0),0))}</strong></td><td className="amount-cell"><strong>{money(monthlyInstallments.reduce((sum,i)=>sum+Number(i.paid||0),0))}</strong></td><td className="amount-cell"><strong>{money(monthlyInstallments.reduce((sum,i)=>sum+Number(i.balance||0),0))}</strong></td><td><span className="cell-sub">Paid: {monthlyInstallments.filter(i=>i.status==='Paid').length}</span><span className="cell-sub">Due: {monthlyInstallments.filter(i=>i.status==='Due').length}</span><span className="cell-sub">Overdue: {monthlyInstallments.filter(i=>i.status==='Overdue').length}</span><span className="cell-sub">Upcoming: {monthlyInstallments.filter(i=>i.status==='Upcoming').length}</span></td></tr></tfoot></table></div></Panel>}
       {section==='daily' && <Panel title="Daily charge breakdown" subtitle="Each Daily reservation is charged once for the full stay: nightly rate multiplied by the number of nights. The charge is due on check-in, and payments are allocated against the stay balance."><div className="daily-mobile-sort">
         <label>{isVietnamese ? "Sắp xếp theo" : "Sort by"}
-          <select value={dailySortColumn} onChange={e => setDailySortColumn(e.target.value)}>
+          <select value={dailySortColumn} onChange={e => updateFinanceSort('daily', e.target.value, dailySortDirection)}>
             <option value="dueDate">{isVietnamese ? "Ngày đến hạn" : "Due date"}</option>
-            <option value="reservationNumber">{isVietnamese ? "Mã đặt phòng" : "Reservation number"}</option>
-            <option value="guest">{isVietnamese ? "Tên khách" : "Guest name"}</option>
+            <option value="reservationNumber">{isVietnamese ? "Mã đặt phòng" : "Reservation"}</option>
+            <option value="guest">{isVietnamese ? "Tên khách" : "Guest"}</option>
             <option value="room">{isVietnamese ? "Phòng" : "Room"}</option>
             <option value="charge">{isVietnamese ? "Khoản thu" : "Charge"}</option>
             <option value="paid">{isVietnamese ? "Đã phân bổ" : "Allocated paid"}</option>
@@ -2672,7 +2727,7 @@ function Finance({section = 'billing', property = 'all'}: {section?: 'billing'|'
           </select>
         </label>
         <label>{isVietnamese ? "Thứ tự" : "Order"}
-          <select value={dailySortDirection} onChange={e => setDailySortDirection(e.target.value as 'asc'|'desc')}>
+          <select value={dailySortDirection} onChange={e => updateFinanceSort('daily', dailySortColumn, e.target.value as 'asc'|'desc')}>
             <option value="asc">{isVietnamese ? "Tăng dần" : "Ascending"}</option>
             <option value="desc">{isVietnamese ? "Giảm dần" : "Descending"}</option>
           </select>
@@ -2684,7 +2739,7 @@ function Finance({section = 'billing', property = 'all'}: {section?: 'billing'|'
       {section==='payments' && <Panel title="Payment history" subtitle="Actual recorded payments; existing bookings have no assumed payments.">
         <div className="payment-mobile-sort">
           <label>{isVietnamese ? "Sắp xếp theo" : "Sort by"}
-            <select value={paymentSortColumn} onChange={e => setPaymentSortColumn(e.target.value)}>
+            <select value={paymentSortColumn} onChange={e => updateFinanceSort('payments', e.target.value, paymentSortDirection)}>
               <option value="date">{isVietnamese ? "Ngày thanh toán" : "Date"}</option>
               <option value="paymentId">{isVietnamese ? "Mã thanh toán" : "Payment ID"}</option>
               <option value="reservation">{isVietnamese ? "Mã đặt phòng" : "Reservation"}</option>
@@ -2695,7 +2750,7 @@ function Finance({section = 'billing', property = 'all'}: {section?: 'billing'|'
             </select>
           </label>
           <label>{isVietnamese ? "Thứ tự" : "Order"}
-            <select value={paymentSortDirection} onChange={e => setPaymentSortDirection(e.target.value as 'asc'|'desc')}>
+            <select value={paymentSortDirection} onChange={e => updateFinanceSort('payments', paymentSortColumn, e.target.value as 'asc'|'desc')}>
               <option value="asc">{isVietnamese ? "Tăng dần" : "Ascending"}</option>
               <option value="desc">{isVietnamese ? "Giảm dần" : "Descending"}</option>
             </select>

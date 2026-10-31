@@ -490,6 +490,8 @@ type AuthUser = {
 const authUsersPath = process.env.AUTH_USERS_FILE || path.join(__dirname, 'users.json');
 const authSecretPath = process.env.AUTH_SECRET_FILE || path.join(__dirname, '.auth-secret');
 const sessionsPath = process.env.AUTH_SESSIONS_FILE || path.join(__dirname, 'sessions.json');
+const sortPreferencesPath = process.env.SORT_PREFERENCES_FILE || path.join(__dirname, 'sort-preferences.json');
+
 
 function saveAuthUsers(users: AuthUser[]) {
   fs.writeFileSync(authUsersPath, JSON.stringify(users, null, 2), { mode: 0o600 });
@@ -569,6 +571,58 @@ function saveSessions(sessions: AuthSession[]) {
 
 function revokeSessionsForUser(userId: string) {
   saveSessions(readSessions().filter(session => session.userId !== userId));
+}
+
+type SortPreference = { column: string; direction: 'asc' | 'desc' };
+type UserSortPreferences = {
+  reservations: SortPreference;
+  billing: SortPreference;
+  installments: SortPreference;
+  daily: SortPreference;
+  payments: SortPreference;
+};
+
+const defaultSortPreferences: UserSortPreferences = {
+  reservations: { column: 'checkIn', direction: 'asc' },
+  billing: { column: 'dueDate', direction: 'asc' },
+  installments: { column: 'dueDate', direction: 'asc' },
+  daily: { column: 'dueDate', direction: 'asc' },
+  payments: { column: 'date', direction: 'desc' }
+};
+
+const allowedSortColumns: Record<keyof UserSortPreferences, string[]> = {
+  reservations: ['guest', 'reservation', 'hotel', 'room', 'checkIn', 'length', 'status'],
+  billing: ['reservation', 'guest', 'room', 'type', 'stay', 'rent', 'water', 'management', 'paid', 'balance', 'dueNow', 'overdue', 'dueDate', 'status'],
+  installments: ['dueDate', 'guest', 'reservationNumber', 'room', 'charge', 'paid', 'balance', 'status'],
+  daily: ['dueDate', 'guest', 'reservationNumber', 'room', 'charge', 'paid', 'balance', 'status'],
+  payments: ['date', 'paymentId', 'reservation', 'guest', 'method', 'notes', 'amount']
+};
+
+function readSortPreferences(): Record<string, Partial<UserSortPreferences>> {
+  if (!fs.existsSync(sortPreferencesPath)) return {};
+  const preferences = JSON.parse(fs.readFileSync(sortPreferencesPath, 'utf8'));
+  if (!preferences || typeof preferences !== 'object' || Array.isArray(preferences)) {
+    throw new Error('Sorting preferences file is invalid.');
+  }
+  return preferences;
+}
+
+function saveSortPreferences(preferences: Record<string, Partial<UserSortPreferences>>) {
+  fs.writeFileSync(sortPreferencesPath, JSON.stringify(preferences, null, 2), {
+    encoding: 'utf8',
+    mode: 0o600
+  });
+}
+
+function validSortPreference(
+  table: keyof UserSortPreferences,
+  value: any
+): value is SortPreference {
+  return !!value
+    && typeof value === 'object'
+    && !Array.isArray(value)
+    && allowedSortColumns[table].includes(value.column)
+    && (value.direction === 'asc' || value.direction === 'desc');
 }
 
 function makeToken(user: AuthUser) {
@@ -694,6 +748,52 @@ app.patch('/api/v1/auth/preferences/language', (req, res) => {
   saveAuthUsers(users);
 
   res.json({ data: publicUser(user) });
+});
+
+app.get('/api/v1/auth/preferences/sorting', (req, res) => {
+  const userId = (req as any).authUser?.id;
+  if (!userId) return res.status(401).json({ error: 'Please sign in to continue.' });
+
+  const allPreferences = readSortPreferences();
+  const saved = allPreferences[userId] || {};
+  const data = { ...defaultSortPreferences };
+
+  for (const table of Object.keys(defaultSortPreferences) as (keyof UserSortPreferences)[]) {
+    const value = saved[table];
+    if (validSortPreference(table, value)) data[table] = value;
+  }
+
+  res.json({ data });
+});
+
+app.patch('/api/v1/auth/preferences/sorting', (req, res) => {
+  const userId = (req as any).authUser?.id;
+  if (!userId) return res.status(401).json({ error: 'Please sign in to continue.' });
+
+  const updates = req.body;
+  if (!updates || typeof updates !== 'object' || Array.isArray(updates)) {
+    return res.status(400).json({ error: 'Sorting preferences must be an object.' });
+  }
+
+  const tables = Object.keys(defaultSortPreferences) as (keyof UserSortPreferences)[];
+  const updateKeys = Object.keys(updates);
+
+  if (!updateKeys.length || updateKeys.some(key => !tables.includes(key as keyof UserSortPreferences))) {
+    return res.status(400).json({ error: 'One or more sorting preference tables are invalid.' });
+  }
+
+  for (const key of updateKeys as (keyof UserSortPreferences)[]) {
+    if (!validSortPreference(key, updates[key])) {
+      return res.status(400).json({ error: `Invalid sorting preference for ${key}.` });
+    }
+  }
+
+  const allPreferences = readSortPreferences();
+  const current = allPreferences[userId] || {};
+  allPreferences[userId] = { ...current, ...updates };
+  saveSortPreferences(allPreferences);
+
+  res.json({ data: { ...defaultSortPreferences, ...allPreferences[userId] } });
 });
 
 app.get('/api/v1/admin/users', requireAdmin, (_req, res) => {

@@ -35,6 +35,12 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify({ language })
     }),
+  sortPreferences: () => request<any>('/auth/preferences/sorting'),
+  updateSortPreferences: (preferences: Record<string, { column: string; direction: 'asc' | 'desc' }>) =>
+    request<any>('/auth/preferences/sorting', {
+      method: 'PATCH',
+      body: JSON.stringify(preferences)
+    }),
   logout: () => request<any>('/auth/logout', { method: 'POST' }),
   users: () => request<any>('/admin/users'),
   createUser: (data: {

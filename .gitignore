@@ -18,3 +18,4 @@ server/push-subscriptions.json
 server/users.json
 server/.auth-secret
 server/sessions.json
+server/sort-preferences.json
