@@ -2158,9 +2158,22 @@ function Finance({section = 'billing', property = 'all', userId}: {section?: 'bi
     sum+(r.installments||[]).filter((i:any)=>inPeriod(String(i.dueDate||'')))
       .reduce((sub:number,i:any)=>sub+Number(i.charge||0),0),0);
 
+  const upcomingEndDate = new Date(`${today}T00:00:00Z`);
+  upcomingEndDate.setUTCDate(upcomingEndDate.getUTCDate() + 30);
+  const upcomingEnd = upcomingEndDate.toISOString().slice(0,10);
+  const isUpcomingReservation = (r:any) => {
+    const checkIn = String(r.checkIn || '');
+    return (period === 'all' || period === today.slice(0,7)) &&
+      checkIn > today && checkIn <= upcomingEnd;
+  };
+
   // Rebuild historical installment balances using only payments recorded
-  // by the selected cutoff. The current All-time view remains unchanged.
-  const historicalBills: AnyRow[] = period === 'all' ? bills : bills.map(r=>{
+  // by the selected cutoff. All-time rows receive the same Upcoming rule.
+  const historicalBills: AnyRow[] = period === 'all'
+    ? bills.map(r => r.status === 'Upcoming'
+        ? {...r, status: isUpcomingReservation(r) ? 'Upcoming' : 'Setup needed'}
+        : r)
+    : bills.map(r=>{
     const installments = (r.installments||[])
       .map((i:any)=>{
         // Remove every currently saved adjustment to reconstruct the
@@ -2287,8 +2300,9 @@ function Finance({section = 'billing', property = 'all', userId}: {section?: 'bi
           : sum;
       },0
     );
+    const isUpcoming = isUpcomingReservation(r);
     const status = charge<=0
-      ? (Number(r.charge || 0) > 0 ? 'Upcoming' : 'Setup needed')
+      ? (Number(r.charge || 0) > 0 && isUpcoming ? 'Upcoming' : 'Setup needed')
       : balance<=0 ? 'Paid'
       : overdueAmount>0 ? 'Overdue' : 'Due';
     return {
