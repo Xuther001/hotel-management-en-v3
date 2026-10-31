@@ -1132,11 +1132,26 @@ app.post('/api/v1/reservations', (req, res) => {
     });
   }
 
-  const usedIds = new Set((d.reservations || []).map((r: AnyRecord) => String(r.id || "")));
-  const maxReservationNumber = (d.reservations || []).reduce((max: number, r: AnyRecord) => {
-    const match = /^RES-(\d+)$/.exec(String(r.id || ""));
+  // Reservation IDs must never be reused while a billing setting still references them.
+  const existingReservationIds = (d.reservations || []).map(
+    (r: AnyRecord) => String(r.id || "")
+  );
+  const existingBillingReservationIds = (d.billingSettings || []).map(
+    (setting: AnyRecord) => String(setting.reservationId || "")
+  );
+  const usedIds = new Set([
+    ...existingReservationIds,
+    ...existingBillingReservationIds
+  ]);
+
+  const maxReservationNumber = [
+    ...existingReservationIds,
+    ...existingBillingReservationIds
+  ].reduce((max: number, existingId: string) => {
+    const match = /^RES-(\d+)$/.exec(existingId);
     return match ? Math.max(max, Number(match[1])) : max;
   }, 1052);
+
   let nextReservationNumber = maxReservationNumber + 1;
   while (usedIds.has(`RES-${nextReservationNumber}`)) nextReservationNumber++;
   const id = `RES-${nextReservationNumber}`;
@@ -1331,6 +1346,13 @@ app.delete('/api/v1/reservations/:id', (req, res) => {
   }
 
   const [deleted] = d.reservations.splice(index, 1);
+
+  // Remove billing configuration belonging to this reservation.
+  if (Array.isArray(d.billingSettings)) {
+    d.billingSettings = d.billingSettings.filter(
+      (setting: AnyRecord) => setting.reservationId !== deleted.id
+    );
+  }
 
   addActivity(d, `Reservation ${deleted.id} for ${deleted.guest} permanently deleted`, [
     { field: 'Guest', from: activityValue(d, 'guest', deleted.guest), to: 'Deleted' },
@@ -1753,6 +1775,38 @@ function getBillingRows(d: AnyRecord) {
           installment.balance =
             Number(installment.balance || 0) + electricityFee;
         }
+      }
+
+      // Discounts and other charges adjust the bill, not payments recorded.
+      // Apply them before allocating payments so balances are recalculated
+      // consistently. Future-effective adjustments are not applied yet.
+      for (const payment of reservationPayments) {
+        const effectiveDate = String(payment.effectiveDate || payment.date || '');
+        if (effectiveDate > today) continue;
+
+        const discount = Math.max(0, Number(payment.discount || 0));
+        const otherCharges = Math.max(0, Number(payment.otherCharges || 0));
+        const adjustment = otherCharges - discount;
+        if (!adjustment) continue;
+
+        const installment = rentalType === 'Monthly'
+          ? monthlyInstallmentForPayment(installments, effectiveDate)
+          : installments
+              .filter((item: AnyRecord) =>
+                String(item.dueDate || '') <= effectiveDate
+              )
+              .sort((a: AnyRecord, b: AnyRecord) =>
+                String(a.dueDate || '').localeCompare(String(b.dueDate || ''))
+              )
+              .slice(-1)[0];
+
+        if (!installment) continue;
+
+        installment.charge = Number(installment.charge || 0) + adjustment;
+        installment.balance = Math.max(
+          0,
+          Number(installment.balance || 0) + adjustment
+        );
       }
 
       // A payment reduces today's balance only on or after its effective date.
@@ -2260,6 +2314,20 @@ app.patch('/api/v1/billing/payments/:paymentId', (req, res) => {
   const electricityFee = Number(
     req.body.electricityFee ?? payment.electricityFee ?? 0
   );
+  const discount = Number(req.body.discount ?? payment.discount ?? 0);
+  const otherCharges = Number(
+    req.body.otherCharges ?? payment.otherCharges ?? 0
+  );
+
+  if (!Number.isFinite(discount) || discount < 0)
+    return res.status(400).json({
+      error: 'Discount must be zero or a positive amount.'
+    });
+
+  if (!Number.isFinite(otherCharges) || otherCharges < 0)
+    return res.status(400).json({
+      error: 'Other charges must be zero or a positive amount.'
+    });
 
   if (!Number.isFinite(electricityFee) || electricityFee < 0)
     return res.status(400).json({
@@ -2337,14 +2405,71 @@ app.patch('/api/v1/billing/payments/:paymentId', (req, res) => {
         && oldEffectiveDate <= today
         ? Math.max(0, Number(payment.electricityFee || 0))
         : 0;
+    const existingAdjustmentInTarget =
+      oldInstallment?.dueDate === installment.dueDate
+        && oldEffectiveDate <= today
+        ? Number(payment.otherCharges || 0) - Number(payment.discount || 0)
+        : 0;
     const baseInstallmentCharge = Math.max(
       0,
-      Number(installment.charge || 0) - existingElectricityInTarget
+      Number(installment.charge || 0)
+        - existingElectricityInTarget
+        - existingAdjustmentInTarget
     );
 
     if (Math.round(amount) > baseInstallmentCharge)
       return res.status(400).json({
         error: `Payment cannot exceed this billing period's base charge of ${baseInstallmentCharge.toLocaleString('en-US')} VND.`
+      });
+  }
+
+  if (billingRow) {
+    const today = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Ho_Chi_Minh'
+    }).format(new Date());
+
+    const findTargetInstallment = (dateValue: string) =>
+      billingRow.rentalType === 'Monthly'
+        ? monthlyInstallmentForPayment(
+            billingRow.installments || [],
+            dateValue
+          )
+        : (billingRow.installments || [])
+            .filter((item: AnyRecord) =>
+              String(item.dueDate || '') <= dateValue
+            )
+            .sort((a: AnyRecord, b: AnyRecord) =>
+              String(a.dueDate || '').localeCompare(String(b.dueDate || ''))
+            )
+            .slice(-1)[0];
+
+    const targetInstallment = findTargetInstallment(effectiveDate);
+
+    if (!targetInstallment)
+      return res.status(400).json({
+        error: 'The effective date does not match a billing period.'
+      });
+
+    const oldEffectiveDate = String(
+      payment.effectiveDate || payment.date || ''
+    );
+    const oldTargetInstallment = findTargetInstallment(oldEffectiveDate);
+
+    const oldAdjustmentInTarget =
+      oldEffectiveDate <= today
+        && oldTargetInstallment?.dueDate === targetInstallment.dueDate
+        ? Number(payment.otherCharges || 0) - Number(payment.discount || 0)
+        : 0;
+
+    const targetChargeBeforeThisEdit =
+      Number(targetInstallment.charge || 0) - oldAdjustmentInTarget;
+
+    if (
+      Math.round(discount) > 0 &&
+      Math.round(discount) >= targetChargeBeforeThisEdit
+    )
+      return res.status(400).json({
+        error: 'Discount must be less than the total charges for this billing period.'
       });
   }
 
@@ -2354,11 +2479,15 @@ app.patch('/api/v1/billing/payments/:paymentId', (req, res) => {
     effectiveDate: payment.effectiveDate || payment.date,
     method: payment.method,
     notes: payment.notes || '',
-    electricityFee: Number(payment.electricityFee || 0)
+    electricityFee: Number(payment.electricityFee || 0),
+    discount: Number(payment.discount || 0),
+    otherCharges: Number(payment.otherCharges || 0)
   };
 
   payment.amount = Math.round(amount);
   payment.electricityFee = Math.round(electricityFee);
+  payment.discount = Math.round(discount);
+  payment.otherCharges = Math.round(otherCharges);
   payment.date = date;
   payment.effectiveDate = effectiveDate;
   payment.method = method;
@@ -2379,6 +2508,8 @@ app.patch('/api/v1/billing/payments/:paymentId', (req, res) => {
       { field: 'Amount', from: before.amount.toLocaleString('en-US') + ' VND', to: payment.amount.toLocaleString('en-US') + ' VND' },
       { field: 'Receipt date', from: before.date, to: payment.date },
       { field: 'Effective date', from: before.effectiveDate, to: effectiveDate },
+      { field: 'Discount', from: before.discount.toLocaleString('en-US') + ' VND', to: payment.discount.toLocaleString('en-US') + ' VND' },
+      { field: 'Other charges', from: before.otherCharges.toLocaleString('en-US') + ' VND', to: payment.otherCharges.toLocaleString('en-US') + ' VND' },
       { field: 'Method', from: before.method, to: payment.method }
     ])} · By: ${activityActor(req)}`, '/finance/payments')
     .catch(error => console.error('Could not dispatch payment notification:', error));
