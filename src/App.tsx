@@ -1815,6 +1815,8 @@ function Finance({section = 'billing', property = 'all'}: {section?: 'billing'|'
   const [billingSortDirection, setBillingSortDirection] = useState<'asc'|'desc'>('asc');
   const [installmentSortColumn, setInstallmentSortColumn] = useState('dueDate');
   const [installmentSortDirection, setInstallmentSortDirection] = useState<'asc'|'desc'>('asc');
+  const [dailySortColumn, setDailySortColumn] = useState('dueDate');
+  const [dailySortDirection, setDailySortDirection] = useState<'asc'|'desc'>('asc');
   const [billingPage, setBillingPage] = useState(1);
   const billingRegisterRef = useRef<HTMLDivElement | null>(null);
   const billingTableScreenPosition = useRef<number | null>(null);
@@ -2238,6 +2240,36 @@ function Finance({section = 'billing', property = 'all'}: {section?: 'billing'|'
       .filter((i:any)=>period==='all'||inPeriod(String(i.dueDate||'')))
       .map((i:any)=>({...i,reservationId:r.reservationId,guest:r.guest,room:r.room})))
     .sort((a,b)=>String(a.dueDate).localeCompare(String(b.dueDate)));
+  const sortedDailyCharges = [...dailyCharges].sort((a:any, b:any) => {
+    let comparison = 0;
+    switch (dailySortColumn) {
+      case 'dueDate':
+        comparison = String(a.dueDate || '').localeCompare(String(b.dueDate || ''));
+        break;
+      case 'reservationNumber':
+        comparison = String(a.reservationId || '').localeCompare(String(b.reservationId || ''), undefined, { numeric: true, sensitivity: 'base' });
+        break;
+      case 'guest':
+        comparison = String(a.guest || '').localeCompare(String(b.guest || ''), undefined, { sensitivity: 'base' });
+        break;
+      case 'room':
+        comparison = String(a.room || '').localeCompare(String(b.room || ''), undefined, { numeric: true, sensitivity: 'base' });
+        break;
+      case 'charge':
+        comparison = Number(a.charge || 0) - Number(b.charge || 0);
+        break;
+      case 'paid':
+        comparison = Number(a.paid || 0) - Number(b.paid || 0);
+        break;
+      case 'balance':
+        comparison = Number(a.balance || 0) - Number(b.balance || 0);
+        break;
+      case 'status':
+        comparison = String(a.status || '').localeCompare(String(b.status || ''), undefined, { sensitivity: 'base' });
+        break;
+    }
+    return dailySortDirection === 'asc' ? comparison : -comparison;
+  });
   const filteredBillingRows = historicalBills.filter(r => billingStatusFilter === 'All' || r.status === billingStatusFilter);
   const sortedBillingRows = [...filteredBillingRows].sort((a, b) => {
     let comparison = 0;
@@ -2322,6 +2354,22 @@ function Finance({section = 'billing', property = 'all'}: {section?: 'billing'|'
       }}
     >
       {label} <span aria-hidden="true">{installmentSortColumn === column ? (installmentSortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
+    </th>
+  );
+
+  const dailySortHeader = (column: string, label: string) => (
+    <th
+      aria-sort={dailySortColumn === column ? (dailySortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
+      onClick={() => {
+        if (dailySortColumn === column) {
+          setDailySortDirection(current => current === 'asc' ? 'desc' : 'asc');
+        } else {
+          setDailySortColumn(column);
+          setDailySortDirection('asc');
+        }
+      }}
+    >
+      {label} <span aria-hidden="true">{dailySortColumn === column ? (dailySortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
     </th>
   );
 
@@ -2565,10 +2613,29 @@ function Finance({section = 'billing', property = 'all'}: {section?: 'billing'|'
         {sortedMonthlyInstallments.map((i:any)=><tr key={`${i.reservationId}-${i.dueDate}`}><td>{i.dueDate}</td><td><strong>{i.reservationId}</strong></td><td>{i.guest}</td><td>{i.room}</td><td className="amount-cell">{money(i.charge)}</td><td className="amount-cell">{money(i.paid)}</td><td className="amount-cell"><strong>{money(i.balance)}</strong></td><td><Badge tone={i.status==='Paid'?'success':i.status==='Overdue'?'warning':i.status==='Due'?'neutral':'info'}>{i.status}</Badge></td></tr>)}
         {!monthlyInstallments.length&&<tr><td colSpan={8}>No monthly installments configured.</td></tr>}
       </tbody><tfoot><tr className="installment-total-row"><td><strong>TOTAL</strong></td><td><strong>{monthlyInstallments.length} installments</strong></td><td>—</td><td>—</td><td className="amount-cell"><strong>{money(monthlyInstallments.reduce((sum,i)=>sum+Number(i.charge||0),0))}</strong></td><td className="amount-cell"><strong>{money(monthlyInstallments.reduce((sum,i)=>sum+Number(i.paid||0),0))}</strong></td><td className="amount-cell"><strong>{money(monthlyInstallments.reduce((sum,i)=>sum+Number(i.balance||0),0))}</strong></td><td><span className="cell-sub">Paid: {monthlyInstallments.filter(i=>i.status==='Paid').length}</span><span className="cell-sub">Due: {monthlyInstallments.filter(i=>i.status==='Due').length}</span><span className="cell-sub">Overdue: {monthlyInstallments.filter(i=>i.status==='Overdue').length}</span><span className="cell-sub">Upcoming: {monthlyInstallments.filter(i=>i.status==='Upcoming').length}</span></td></tr></tfoot></table></div></Panel>}
-      {section==='daily' && <Panel title="Daily charge breakdown" subtitle="Each Daily reservation is charged once for the full stay: nightly rate multiplied by the number of nights. The charge is due on check-in, and payments are allocated against the stay balance."><div className="mini-stat-grid"><div><span>{isVietnamese?"Tổng tiền phải thu theo ngày":"Daily total charges"}</span><strong>{money(dailyCharges.reduce((sum,i)=>sum+Number(i.charge||0),0))}</strong></div><div><span>{isVietnamese?"Tổng tiền đã thu theo ngày":"Daily total paid"}</span><strong>{money(dailyCharges.reduce((sum,i)=>sum+Number(i.paid||0),0))}</strong></div><div><span>{isVietnamese?"Công nợ theo ngày còn lại":"Daily outstanding balance"}</span><strong>{money(dailyCharges.reduce((sum,i)=>sum+Number(i.balance||0),0))}</strong></div></div><div className="table-scroll installment-breakdown-scroll"><table className="installment-breakdown-table"><thead><tr><th>DUE DATE</th><th>RESERVATION / GUEST</th><th>ROOM</th><th>CHARGE</th><th>ALLOCATED PAID</th><th>REMAINING</th><th>STATUS</th></tr></thead><tbody>
-        {dailyCharges.map((i:any)=><tr key={`${i.reservationId}-${i.dueDate}`}><td>{i.dueDate}</td><td><strong>{i.reservationId}</strong><span className="cell-sub">{i.guest}</span></td><td>{i.room}</td><td className="amount-cell">{money(i.charge)}</td><td className="amount-cell">{money(i.paid)}</td><td className="amount-cell"><strong>{money(i.balance)}</strong></td><td><Badge tone={i.status==='Paid'?'success':i.status==='Overdue'?'warning':i.status==='Due'?'neutral':'info'}>{i.status}</Badge></td></tr>)}
-        {!dailyCharges.length&&<tr><td colSpan={7}>No daily charges configured for this period and hotel.</td></tr>}
-      </tbody><tfoot><tr className="installment-total-row"><td><strong>TOTAL</strong></td><td><strong>{dailyCharges.length} reservations</strong></td><td>—</td><td className="amount-cell"><strong>{money(dailyCharges.reduce((sum,i)=>sum+Number(i.charge||0),0))}</strong></td><td className="amount-cell"><strong>{money(dailyCharges.reduce((sum,i)=>sum+Number(i.paid||0),0))}</strong></td><td className="amount-cell"><strong>{money(dailyCharges.reduce((sum,i)=>sum+Number(i.balance||0),0))}</strong></td><td><span className="cell-sub">Paid: {dailyCharges.filter(i=>i.status==='Paid').length}</span><span className="cell-sub">Due: {dailyCharges.filter(i=>i.status==='Due').length}</span><span className="cell-sub">Overdue: {dailyCharges.filter(i=>i.status==='Overdue').length}</span><span className="cell-sub">Upcoming: {dailyCharges.filter(i=>i.status==='Upcoming').length}</span></td></tr></tfoot></table></div></Panel>}
+      {section==='daily' && <Panel title="Daily charge breakdown" subtitle="Each Daily reservation is charged once for the full stay: nightly rate multiplied by the number of nights. The charge is due on check-in, and payments are allocated against the stay balance."><div className="daily-mobile-sort">
+        <label>{isVietnamese ? "Sắp xếp theo" : "Sort by"}
+          <select value={dailySortColumn} onChange={e => setDailySortColumn(e.target.value)}>
+            <option value="dueDate">{isVietnamese ? "Ngày đến hạn" : "Due date"}</option>
+            <option value="reservationNumber">{isVietnamese ? "Mã đặt phòng" : "Reservation number"}</option>
+            <option value="guest">{isVietnamese ? "Tên khách" : "Guest name"}</option>
+            <option value="room">{isVietnamese ? "Phòng" : "Room"}</option>
+            <option value="charge">{isVietnamese ? "Khoản thu" : "Charge"}</option>
+            <option value="paid">{isVietnamese ? "Đã phân bổ" : "Allocated paid"}</option>
+            <option value="balance">{isVietnamese ? "Còn lại" : "Remaining"}</option>
+            <option value="status">{isVietnamese ? "Trạng thái" : "Status"}</option>
+          </select>
+        </label>
+        <label>{isVietnamese ? "Thứ tự" : "Order"}
+          <select value={dailySortDirection} onChange={e => setDailySortDirection(e.target.value as 'asc'|'desc')}>
+            <option value="asc">{isVietnamese ? "Tăng dần" : "Ascending"}</option>
+            <option value="desc">{isVietnamese ? "Giảm dần" : "Descending"}</option>
+          </select>
+        </label>
+      </div><div className="mini-stat-grid"><div><span>{isVietnamese?"Tổng tiền phải thu theo ngày":"Daily total charges"}</span><strong>{money(dailyCharges.reduce((sum,i)=>sum+Number(i.charge||0),0))}</strong></div><div><span>{isVietnamese?"Tổng tiền đã thu theo ngày":"Daily total paid"}</span><strong>{money(dailyCharges.reduce((sum,i)=>sum+Number(i.paid||0),0))}</strong></div><div><span>{isVietnamese?"Công nợ theo ngày còn lại":"Daily outstanding balance"}</span><strong>{money(dailyCharges.reduce((sum,i)=>sum+Number(i.balance||0),0))}</strong></div></div><div className="table-scroll installment-breakdown-scroll"><table className="installment-breakdown-table daily-charge-table"><thead><tr>{dailySortHeader('dueDate', 'DUE DATE')}{dailySortHeader('reservationNumber', 'RESERVATION')}{dailySortHeader('guest', 'GUEST')}{dailySortHeader('room', 'ROOM')}{dailySortHeader('charge', 'CHARGE')}{dailySortHeader('paid', 'ALLOCATED PAID')}{dailySortHeader('balance', 'REMAINING')}{dailySortHeader('status', 'STATUS')}</tr></thead><tbody>
+        {sortedDailyCharges.map((i:any)=><tr key={`${i.reservationId}-${i.dueDate}`}><td>{i.dueDate}</td><td><strong>{i.reservationId}</strong></td><td>{i.guest}</td><td>{i.room}</td><td className="amount-cell">{money(i.charge)}</td><td className="amount-cell">{money(i.paid)}</td><td className="amount-cell"><strong>{money(i.balance)}</strong></td><td><Badge tone={i.status==='Paid'?'success':i.status==='Overdue'?'warning':i.status==='Due'?'neutral':'info'}>{i.status}</Badge></td></tr>)}
+        {!dailyCharges.length&&<tr><td colSpan={8}>No daily charges configured for this period and hotel.</td></tr>}
+      </tbody><tfoot><tr className="installment-total-row"><td><strong>TOTAL</strong></td><td><strong>{dailyCharges.length} reservations</strong></td><td>—</td><td>—</td><td className="amount-cell"><strong>{money(dailyCharges.reduce((sum,i)=>sum+Number(i.charge||0),0))}</strong></td><td className="amount-cell"><strong>{money(dailyCharges.reduce((sum,i)=>sum+Number(i.paid||0),0))}</strong></td><td className="amount-cell"><strong>{money(dailyCharges.reduce((sum,i)=>sum+Number(i.balance||0),0))}</strong></td><td><span className="cell-sub">Paid: {dailyCharges.filter(i=>i.status==='Paid').length}</span><span className="cell-sub">Due: {dailyCharges.filter(i=>i.status==='Due').length}</span><span className="cell-sub">Overdue: {dailyCharges.filter(i=>i.status==='Overdue').length}</span><span className="cell-sub">Upcoming: {dailyCharges.filter(i=>i.status==='Upcoming').length}</span></td></tr></tfoot></table></div></Panel>}
       {section==='payments' && <Panel title="Payment history" subtitle="Actual recorded payments; existing bookings have no assumed payments."><div className="table-scroll payment-history-scroll"><table className="payment-history-table"><thead><tr><th>DATE / PAYMENT</th><th>RESERVATION</th><th>METHOD</th><th>NOTES</th><th>AMOUNT</th><th>ACTIONS</th></tr></thead><tbody>
         {paymentsInPeriod.sort((a,b)=>String(b.date).localeCompare(String(a.date))).map((p:AnyRow)=><tr key={p.id}><td><strong>{p.date}</strong><span className="cell-sub">{p.id}</span>{p.effectiveDate&&p.effectiveDate!==p.date&&<span className="cell-sub">Effective {p.effectiveDate}</span>}</td><td>{p.reservationId}<span className="payment-guest-name">{p.guest}</span></td><td>{p.method}</td><td>{p.notes||'—'}</td><td className="amount-cell">{money(p.amount)}{p.monthlyFeeBreakdown
           ? <span className="cell-sub">Rent {money(p.rentAmount)} · Management {money(p.managementFee)} · Water {money(p.waterFee)} · Electricity {money(p.electricityFee||0)}</span>
