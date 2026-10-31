@@ -2269,7 +2269,6 @@ function Finance({section = 'billing', property = 'all', userId}: {section?: 'bi
     const charge = dueInstallments.reduce((sum:number,i:any)=>sum+Number(i.charge||0),0);
     const rentCharge = dueInstallments.reduce((sum:number,i:any)=>sum+Number(i.rentCharge ?? i.charge ?? 0),0);
     const balance = dueInstallments.reduce((sum:number,i:any)=>sum+Number(i.balance||0),0);
-    const totalBalance = installments.reduce((sum:number,i:any)=>sum+Number(i.balance||0),0);
     const overdueAmount = dueInstallments.reduce((sum:number,i:any)=>{
       if (Number(i.balance||0)<=0) return sum;
       const due = String(i.dueDate||'');
@@ -2293,7 +2292,7 @@ function Finance({section = 'billing', property = 'all', userId}: {section?: 'bi
       : balance<=0 ? 'Paid'
       : overdueAmount>0 ? 'Overdue' : 'Due';
     return {
-      ...r, charge, rentCharge, paid, balance:totalBalance, dueNow:balance, overdueAmount,
+      ...r, charge, rentCharge, paid, balance, dueNow:balance, overdueAmount,
       dueDate:dueInstallments.find((i:any)=>Number(i.balance||0)>0)?.dueDate
         || dueInstallments[0]?.dueDate || r.checkIn,
       status,
