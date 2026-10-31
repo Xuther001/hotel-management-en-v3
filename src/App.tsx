@@ -747,7 +747,9 @@ function ReservationTable({ rows, compact = false, onStatusChange, onDelete, onE
     switch (sortColumn) {
       case "guest":
         result = String(a.guest || "").localeCompare(String(b.guest || ""), undefined, { sensitivity: "base" });
-        if (!result) result = String(a.id || "").localeCompare(String(b.id || ""));
+        break;
+      case "reservation":
+        result = String(a.id || "").localeCompare(String(b.id || ""), undefined, { numeric: true, sensitivity: "base" });
         break;
       case "hotel":
         result = getHotelName(a).localeCompare(getHotelName(b), undefined, { numeric: true, sensitivity: "base" });
@@ -775,7 +777,8 @@ function ReservationTable({ rows, compact = false, onStatusChange, onDelete, onE
       <label>
         <span>{isVietnamese ? "Sắp xếp theo" : "Sort by"}</span>
         <select value={sortColumn} onChange={e => setSortColumn(e.target.value)}>
-          <option value="guest">{isVietnamese ? "Đặt phòng / Khách" : "Booking / Guest"}</option>
+          <option value="guest">{isVietnamese ? "Khách" : "Guest"}</option>
+          <option value="reservation">{isVietnamese ? "Mã đặt phòng" : "Reservation"}</option>
           <option value="hotel">{isVietnamese ? "Khách sạn" : "Hotel"}</option>
           <option value="room">{isVietnamese ? "Phòng" : "Room"}</option>
           <option value="checkIn">{isVietnamese ? "Lưu trú" : "Stay"}</option>
@@ -792,17 +795,20 @@ function ReservationTable({ rows, compact = false, onStatusChange, onDelete, onE
       </label>
     </div>}
     <table>
-    <thead><tr>{sortHeader("guest", isVietnamese ? "ĐẶT PHÒNG / KHÁCH" : "BOOKING / GUEST")}{sortHeader("hotel", isVietnamese ? "KHÁCH SẠN" : "HOTEL")}{sortHeader("room", isVietnamese ? "PHÒNG" : "ROOM")}{sortHeader("checkIn", isVietnamese ? "LƯU TRÚ" : "STAY")}{sortHeader("length", isVietnamese ? "THỜI LƯỢNG LƯU TRÚ" : "LENGTH OF STAY")}{sortHeader("status", isVietnamese ? "TRẠNG THÁI" : "STATUS")}{!compact && (onDelete || onEdit) && <th>ACTIONS</th>}</tr></thead>
+    <thead><tr>{sortHeader("guest", isVietnamese ? "KHÁCH" : "GUEST")}{sortHeader("reservation", isVietnamese ? "MÃ ĐẶT PHÒNG" : "RESERVATION")}{sortHeader("hotel", isVietnamese ? "KHÁCH SẠN" : "HOTEL")}{sortHeader("room", isVietnamese ? "PHÒNG" : "ROOM")}{sortHeader("checkIn", isVietnamese ? "LƯU TRÚ" : "STAY")}{sortHeader("length", isVietnamese ? "THỜI LƯỢNG LƯU TRÚ" : "LENGTH OF STAY")}{sortHeader("status", isVietnamese ? "TRẠNG THÁI" : "STATUS")}{!compact && (onDelete || onEdit) && <th>ACTIONS</th>}</tr></thead>
     <tbody>{sortedRows.map(r => {
       const expired = r.checkOut < today;
       return <tr key={r.id}>
         <td data-label={isVietnamese ? "KHÁCH" : "GUEST"}>
           <strong>{r.guest}</strong>
-          <span className="cell-sub">{r.id} · {r.source}</span>
           {String(r.note || '').trim() && <div className="reservation-note-content">
             <span className="reservation-note-icon" aria-hidden="true">📝</span>
             {String(r.note).trim()}
           </div>}
+        </td>
+        <td data-label={isVietnamese ? "MÃ ĐẶT PHÒNG" : "RESERVATION"}>
+          <strong>{r.id}</strong>
+          <span className="cell-sub">{r.source}</span>
         </td>
         <td data-label={isVietnamese ? "KHÁCH SẠN" : "HOTEL"}>{r.propertyId === "hotel-a" ? "Hotel A" : r.propertyId === "hotel-b" ? "Hotel B" : (r.property || "Unknown hotel")}</td>
         <td data-label={isVietnamese ? "PHÒNG" : "ROOM"}>{r.room}</td>
@@ -1807,6 +1813,8 @@ function Finance({section = 'billing', property = 'all'}: {section?: 'billing'|'
   const [billingStatusFilter, setBillingStatusFilter] = useState('Overdue');
   const [billingSortColumn, setBillingSortColumn] = useState('dueDate');
   const [billingSortDirection, setBillingSortDirection] = useState<'asc'|'desc'>('asc');
+  const [installmentSortColumn, setInstallmentSortColumn] = useState('dueDate');
+  const [installmentSortDirection, setInstallmentSortDirection] = useState<'asc'|'desc'>('asc');
   const [billingPage, setBillingPage] = useState(1);
   const billingRegisterRef = useRef<HTMLDivElement | null>(null);
   const billingTableScreenPosition = useRef<number | null>(null);
@@ -2194,6 +2202,36 @@ function Finance({section = 'billing', property = 'all'}: {section?: 'billing'|'
       .filter((i:any)=>period==='all'||inPeriod(String(i.dueDate||'')))
       .map((i:any)=>({...i,reservationId:r.reservationId,guest:r.guest,room:r.room})))
     .sort((a,b)=>String(a.dueDate).localeCompare(String(b.dueDate)));
+  const sortedMonthlyInstallments = [...monthlyInstallments].sort((a:any, b:any) => {
+    let comparison = 0;
+    switch (installmentSortColumn) {
+      case 'dueDate':
+        comparison = String(a.dueDate || '').localeCompare(String(b.dueDate || ''));
+        break;
+      case 'guest':
+        comparison = String(a.guest || '').localeCompare(String(b.guest || ''), undefined, { sensitivity: 'base' });
+        break;
+      case 'reservationNumber':
+        comparison = String(a.reservationId || '').localeCompare(String(b.reservationId || ''), undefined, { numeric: true, sensitivity: 'base' });
+        break;
+      case 'room':
+        comparison = String(a.room || '').localeCompare(String(b.room || ''), undefined, { numeric: true, sensitivity: 'base' });
+        break;
+      case 'charge':
+        comparison = Number(a.charge || 0) - Number(b.charge || 0);
+        break;
+      case 'paid':
+        comparison = Number(a.paid || 0) - Number(b.paid || 0);
+        break;
+      case 'balance':
+        comparison = Number(a.balance || 0) - Number(b.balance || 0);
+        break;
+      case 'status':
+        comparison = String(a.status || '').localeCompare(String(b.status || ''), undefined, { sensitivity: 'base' });
+        break;
+    }
+    return installmentSortDirection === 'asc' ? comparison : -comparison;
+  });
   const dailyCharges=historicalBills
     .filter(r=>r.rentalType==='Daily' && (property==='all'||r.propertyId===property))
     .flatMap(r=>(r.installments||[])
@@ -2205,8 +2243,10 @@ function Finance({section = 'billing', property = 'all'}: {section?: 'billing'|'
     let comparison = 0;
     switch (billingSortColumn) {
       case 'reservation':
-        comparison = String(a.guest || '').localeCompare(String(b.guest || ''), undefined, { sensitivity: 'base' })
-          || String(a.reservationId || '').localeCompare(String(b.reservationId || ''), undefined, { numeric: true, sensitivity: 'base' });
+        comparison = String(a.reservationId || '').localeCompare(String(b.reservationId || ''), undefined, { numeric: true, sensitivity: 'base' });
+        break;
+      case 'guest':
+        comparison = String(a.guest || '').localeCompare(String(b.guest || ''), undefined, { sensitivity: 'base' });
         break;
       case 'room':
         comparison = String(a.room || '').localeCompare(String(b.room || ''), undefined, { numeric: true, sensitivity: 'base' });
@@ -2266,6 +2306,22 @@ function Finance({section = 'billing', property = 'all'}: {section?: 'billing'|'
       }}
     >
       {label} <span aria-hidden="true">{billingSortColumn === column ? (billingSortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
+    </th>
+  );
+
+  const installmentSortHeader = (column: string, label: string) => (
+    <th
+      aria-sort={installmentSortColumn === column ? (installmentSortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
+      onClick={() => {
+        if (installmentSortColumn === column) {
+          setInstallmentSortDirection(current => current === 'asc' ? 'desc' : 'asc');
+        } else {
+          setInstallmentSortColumn(column);
+          setInstallmentSortDirection('asc');
+        }
+      }}
+    >
+      {label} <span aria-hidden="true">{installmentSortColumn === column ? (installmentSortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
     </th>
   );
 
@@ -2437,7 +2493,8 @@ function Finance({section = 'billing', property = 'all'}: {section?: 'billing'|'
           <label>
             <span>{isVietnamese ? "Sắp xếp theo" : "Sort by"}</span>
             <select value={billingSortColumn} onChange={e => setBillingSortColumn(e.target.value)}>
-              <option value="reservation">{isVietnamese ? "Đặt phòng / Khách" : "Reservation / Guest"}</option>
+              <option value="reservation">{isVietnamese ? "Mã đặt phòng" : "Reservation"}</option>
+              <option value="guest">{isVietnamese ? "Tên khách" : "Guest"}</option>
               <option value="room">{isVietnamese ? "Phòng" : "Room"}</option>
               <option value="type">{isVietnamese ? "Loại lưu trú" : "Type"}</option>
               <option value="stay">{isVietnamese ? "Thời gian lưu trú" : "Stay"}</option>
@@ -2460,9 +2517,9 @@ function Finance({section = 'billing', property = 'all'}: {section?: 'billing'|'
             </select>
           </label>
         </div>
-        <div ref={billingRegisterRef} className="table-scroll billing-register-scroll"><table className="billing-register-table"><thead><tr>{billingSortHeader('reservation', isVietnamese ? "ĐẶT PHÒNG / KHÁCH" : "RESERVATION / GUEST")}{billingSortHeader('room', isVietnamese ? "PHÒNG" : "ROOM")}{billingSortHeader('type', isVietnamese ? "LOẠI LƯU TRÚ" : "TYPE")}{billingSortHeader('stay', isVietnamese ? "THỜI GIAN LƯU TRÚ" : "STAY")}{billingSortHeader('rent', isVietnamese ? "TIỀN THUÊ" : "RENT")}{billingSortHeader('water', isVietnamese ? "TIỀN NƯỚC" : "WATER")}{billingSortHeader('management', isVietnamese ? "PHÍ QUẢN LÝ" : "MANAGEMENT")}{billingSortHeader('paid', isVietnamese ? "ĐÃ THANH TOÁN" : "PAID")}{billingSortHeader('balance', isVietnamese ? "SỐ DƯ CÒN LẠI" : "BALANCE")}{billingSortHeader('dueNow', isVietnamese ? "ĐẾN HẠN HIỆN TẠI" : "DUE NOW")}{billingSortHeader('overdue', isVietnamese ? "QUÁ HẠN" : "OVERDUE")}{billingSortHeader('dueDate', isVietnamese ? "NGÀY ĐẾN HẠN CHƯA THANH TOÁN CŨ NHẤT" : "OLDEST UNPAID DUE DATE")}{billingSortHeader('status', isVietnamese ? "TRẠNG THÁI" : "STATUS")}<th>{isVietnamese ? "THAO TÁC" : "ACTIONS"}</th></tr></thead><tbody>
-         {paginatedBillingRows.map(r=><tr key={r.reservationId}><td><strong>{r.reservationId}</strong><span className="cell-sub">{r.guest}</span><details className="billing-mobile-details"><summary>{isVietnamese ? "Xem chi tiết" : "View details"}</summary><div className="billing-mobile-detail-content"><span><strong>Stay:</strong> {r.checkIn} to {r.checkOut}</span><span><strong>Overdue:</strong> {money(r.overdueAmount)}</span><span><strong>Oldest unpaid due date:</strong> {r.dueDate || '—'}</span></div></details></td><td className="billing-room-number">{r.room}</td><td>{r.rentalType}{r.rentalType==='Monthly'&&r.monthlyRate>0?<span className="cell-sub">{money(r.monthlyRate)}/month</span>:null}</td><td>{r.checkIn}<span className="cell-sub">to {r.checkOut}</span></td><td className="amount-cell">{money(r.rentCharge ?? r.charge)}</td><td className="amount-cell">{r.rentalType==='Monthly'?money(r.waterCharge):'—'}</td><td className="amount-cell">{r.rentalType==='Monthly'?money(r.managementCharge):'—'}</td><td className="amount-cell">{money(r.paid)}</td><td className="amount-cell"><strong>{money(r.balance)}</strong></td><td className="amount-cell">{money(r.dueNow)}</td><td className="amount-cell">{money(r.overdueAmount)}</td><td>{r.dueDate}</td><td><Badge tone={r.status==='Paid'?'success':r.status==='Overdue'||r.status==='Setup needed'?'warning':'neutral'}>{r.status}</Badge></td><td><div className="table-actions"><Button variant="secondary" onClick={()=>{setSelected(r);setConfigRentalType(r.rentalType==='Monthly'?'Monthly':'Daily');setError('');setModal('configure');}}> {isVietnamese?"Thiết lập":"Configure"}</Button><Button onClick={()=>{setSelected(r);setError('');setModal('payment');}} disabled={r.status==='Setup needed'||Number(r.balance||0)<=0}>{isVietnamese?"Ghi nhận thanh toán":"Record payment"}</Button></div></td></tr>)}
-        {!filteredBillingRows.length&&<tr><td colSpan={14}>{isVietnamese?"Không có khoản công nợ nào thuộc trạng thái này.":"No billing entries for this status."}</td></tr>}
+        <div ref={billingRegisterRef} className="table-scroll billing-register-scroll"><table className="billing-register-table"><thead><tr>{billingSortHeader('reservation', isVietnamese ? "ĐẶT PHÒNG" : "RESERVATION")}{billingSortHeader('guest', isVietnamese ? "KHÁCH" : "GUEST")}{billingSortHeader('room', isVietnamese ? "PHÒNG" : "ROOM")}{billingSortHeader('type', isVietnamese ? "LOẠI LƯU TRÚ" : "TYPE")}{billingSortHeader('stay', isVietnamese ? "THỜI GIAN LƯU TRÚ" : "STAY")}{billingSortHeader('rent', isVietnamese ? "TIỀN THUÊ" : "RENT")}{billingSortHeader('water', isVietnamese ? "TIỀN NƯỚC" : "WATER")}{billingSortHeader('management', isVietnamese ? "PHÍ QUẢN LÝ" : "MANAGEMENT")}{billingSortHeader('paid', isVietnamese ? "ĐÃ THANH TOÁN" : "PAID")}{billingSortHeader('balance', isVietnamese ? "SỐ DƯ CÒN LẠI" : "BALANCE")}{billingSortHeader('dueNow', isVietnamese ? "ĐẾN HẠN HIỆN TẠI" : "DUE NOW")}{billingSortHeader('overdue', isVietnamese ? "QUÁ HẠN" : "OVERDUE")}{billingSortHeader('dueDate', isVietnamese ? "NGÀY ĐẾN HẠN CHƯA THANH TOÁN CŨ NHẤT" : "OLDEST UNPAID DUE DATE")}{billingSortHeader('status', isVietnamese ? "TRẠNG THÁI" : "STATUS")}<th>{isVietnamese ? "THAO TÁC" : "ACTIONS"}</th></tr></thead><tbody>
+         {paginatedBillingRows.map(r=><tr key={r.reservationId}><td><strong>{r.reservationId}</strong></td><td>{r.guest}<details className="billing-mobile-details"><summary>{isVietnamese ? "Xem chi tiết" : "View details"}</summary><div className="billing-mobile-detail-content"><span><strong>Stay:</strong> {r.checkIn} to {r.checkOut}</span><span><strong>Overdue:</strong> {money(r.overdueAmount)}</span><span><strong>Oldest unpaid due date:</strong> {r.dueDate || '—'}</span></div></details></td><td className="billing-room-number">{r.room}</td><td>{r.rentalType}{r.rentalType==='Monthly'&&r.monthlyRate>0?<span className="cell-sub">{money(r.monthlyRate)}/month</span>:null}</td><td>{r.checkIn}<span className="cell-sub">to {r.checkOut}</span></td><td className="amount-cell">{money(r.rentCharge ?? r.charge)}</td><td className="amount-cell">{r.rentalType==='Monthly'?money(r.waterCharge):'—'}</td><td className="amount-cell">{r.rentalType==='Monthly'?money(r.managementCharge):'—'}</td><td className="amount-cell">{money(r.paid)}</td><td className="amount-cell"><strong>{money(r.balance)}</strong></td><td className="amount-cell">{money(r.dueNow)}</td><td className="amount-cell">{money(r.overdueAmount)}</td><td>{r.dueDate}</td><td><Badge tone={r.status==='Paid'?'success':r.status==='Overdue'||r.status==='Setup needed'?'warning':'neutral'}>{r.status}</Badge></td><td><div className="table-actions"><Button variant="secondary" onClick={()=>{setSelected(r);setConfigRentalType(r.rentalType==='Monthly'?'Monthly':'Daily');setError('');setModal('configure');}}> {isVietnamese?"Thiết lập":"Configure"}</Button><Button onClick={()=>{setSelected(r);setError('');setModal('payment');}} disabled={r.status==='Setup needed'||Number(r.balance||0)<=0}>{isVietnamese?"Ghi nhận thanh toán":"Record payment"}</Button></div></td></tr>)}
+        {!filteredBillingRows.length&&<tr><td colSpan={15}>{isVietnamese?"Không có khoản công nợ nào thuộc trạng thái này.":"No billing entries for this status."}</td></tr>}
       </tbody></table></div>
       <div style={{display:'grid',gridTemplateColumns:'1fr auto 1fr',alignItems:'center',marginTop:12,gap:8}}>
         <span className="cell-sub">{isVietnamese
@@ -2485,10 +2542,29 @@ function Finance({section = 'billing', property = 'all'}: {section?: 'billing'|'
       </div>
       </Panel>
       </>}
-      {section==='installments' && <Panel title="Monthly installment breakdown" subtitle="Each monthly billing period is charged at the full monthly rate, including the final partial period. Monthly payments are allocated to the anniversary-based period matching the payment date."><div className="mini-stat-grid"><div><span>{isVietnamese?"Tổng tiền phải thu hàng tháng":"Monthly total charges"}</span><strong>{money(monthlyInstallments.reduce((sum,i)=>sum+Number(i.charge||0),0))}</strong></div><div><span>{isVietnamese?"Tổng tiền đã thu hàng tháng":"Monthly total paid"}</span><strong>{money(monthlyInstallments.reduce((sum,i)=>sum+Number(i.paid||0),0))}</strong></div><div><span>{isVietnamese?"Công nợ hàng tháng còn lại":"Monthly outstanding balance"}</span><strong>{money(monthlyInstallments.reduce((sum,i)=>sum+Number(i.balance||0),0))}</strong></div></div><div className="table-scroll installment-breakdown-scroll"><table className="installment-breakdown-table"><thead><tr><th>DUE DATE</th><th>RESERVATION / GUEST</th><th>ROOM</th><th>CHARGE</th><th>ALLOCATED PAID</th><th>REMAINING</th><th>STATUS</th></tr></thead><tbody>
-        {monthlyInstallments.map((i:any)=><tr key={`${i.reservationId}-${i.dueDate}`}><td>{i.dueDate}</td><td><strong>{i.reservationId}</strong><span className="cell-sub">{i.guest}</span></td><td>{i.room}</td><td className="amount-cell">{money(i.charge)}</td><td className="amount-cell">{money(i.paid)}</td><td className="amount-cell"><strong>{money(i.balance)}</strong></td><td><Badge tone={i.status==='Paid'?'success':i.status==='Overdue'?'warning':i.status==='Due'?'neutral':'info'}>{i.status}</Badge></td></tr>)}
-        {!monthlyInstallments.length&&<tr><td colSpan={7}>No monthly installments configured.</td></tr>}
-      </tbody><tfoot><tr className="installment-total-row"><td><strong>TOTAL</strong></td><td><strong>{monthlyInstallments.length} installments</strong></td><td>—</td><td className="amount-cell"><strong>{money(monthlyInstallments.reduce((sum,i)=>sum+Number(i.charge||0),0))}</strong></td><td className="amount-cell"><strong>{money(monthlyInstallments.reduce((sum,i)=>sum+Number(i.paid||0),0))}</strong></td><td className="amount-cell"><strong>{money(monthlyInstallments.reduce((sum,i)=>sum+Number(i.balance||0),0))}</strong></td><td><span className="cell-sub">Paid: {monthlyInstallments.filter(i=>i.status==='Paid').length}</span><span className="cell-sub">Due: {monthlyInstallments.filter(i=>i.status==='Due').length}</span><span className="cell-sub">Overdue: {monthlyInstallments.filter(i=>i.status==='Overdue').length}</span><span className="cell-sub">Upcoming: {monthlyInstallments.filter(i=>i.status==='Upcoming').length}</span></td></tr></tfoot></table></div></Panel>}
+      {section==='installments' && <Panel title="Monthly installment breakdown" subtitle="Each monthly billing period is charged at the full monthly rate, including the final partial period. Monthly payments are allocated to the anniversary-based period matching the payment date."><div className="installment-mobile-sort">
+        <label>{isVietnamese ? "Sắp xếp theo" : "Sort by"}
+          <select value={installmentSortColumn} onChange={e => setInstallmentSortColumn(e.target.value)}>
+            <option value="dueDate">{isVietnamese ? "Ngày đến hạn" : "Due date"}</option>
+            <option value="reservationNumber">{isVietnamese ? "Mã đặt phòng" : "Reservation number"}</option>
+            <option value="guest">{isVietnamese ? "Tên khách" : "Guest name"}</option>
+            <option value="room">{isVietnamese ? "Phòng" : "Room"}</option>
+            <option value="charge">{isVietnamese ? "Khoản thu" : "Charge"}</option>
+            <option value="paid">{isVietnamese ? "Đã phân bổ" : "Allocated paid"}</option>
+            <option value="balance">{isVietnamese ? "Còn lại" : "Remaining"}</option>
+            <option value="status">{isVietnamese ? "Trạng thái" : "Status"}</option>
+          </select>
+        </label>
+        <label>{isVietnamese ? "Thứ tự" : "Order"}
+          <select value={installmentSortDirection} onChange={e => setInstallmentSortDirection(e.target.value as 'asc'|'desc')}>
+            <option value="asc">{isVietnamese ? "Tăng dần" : "Ascending"}</option>
+            <option value="desc">{isVietnamese ? "Giảm dần" : "Descending"}</option>
+          </select>
+        </label>
+      </div><div className="mini-stat-grid"><div><span>{isVietnamese?"Tổng tiền phải thu hàng tháng":"Monthly total charges"}</span><strong>{money(monthlyInstallments.reduce((sum,i)=>sum+Number(i.charge||0),0))}</strong></div><div><span>{isVietnamese?"Tổng tiền đã thu hàng tháng":"Monthly total paid"}</span><strong>{money(monthlyInstallments.reduce((sum,i)=>sum+Number(i.paid||0),0))}</strong></div><div><span>{isVietnamese?"Công nợ hàng tháng còn lại":"Monthly outstanding balance"}</span><strong>{money(monthlyInstallments.reduce((sum,i)=>sum+Number(i.balance||0),0))}</strong></div></div><div className="table-scroll installment-breakdown-scroll"><table className="monthly-installment-table installment-breakdown-table"><thead><tr>{installmentSortHeader('dueDate', 'DUE DATE')}{installmentSortHeader('reservationNumber', 'RESERVATION')}{installmentSortHeader('guest', 'GUEST')}{installmentSortHeader('room', 'ROOM')}{installmentSortHeader('charge', 'CHARGE')}{installmentSortHeader('paid', 'ALLOCATED PAID')}{installmentSortHeader('balance', 'REMAINING')}{installmentSortHeader('status', 'STATUS')}</tr></thead><tbody>
+        {sortedMonthlyInstallments.map((i:any)=><tr key={`${i.reservationId}-${i.dueDate}`}><td>{i.dueDate}</td><td><strong>{i.reservationId}</strong></td><td>{i.guest}</td><td>{i.room}</td><td className="amount-cell">{money(i.charge)}</td><td className="amount-cell">{money(i.paid)}</td><td className="amount-cell"><strong>{money(i.balance)}</strong></td><td><Badge tone={i.status==='Paid'?'success':i.status==='Overdue'?'warning':i.status==='Due'?'neutral':'info'}>{i.status}</Badge></td></tr>)}
+        {!monthlyInstallments.length&&<tr><td colSpan={8}>No monthly installments configured.</td></tr>}
+      </tbody><tfoot><tr className="installment-total-row"><td><strong>TOTAL</strong></td><td><strong>{monthlyInstallments.length} installments</strong></td><td>—</td><td>—</td><td className="amount-cell"><strong>{money(monthlyInstallments.reduce((sum,i)=>sum+Number(i.charge||0),0))}</strong></td><td className="amount-cell"><strong>{money(monthlyInstallments.reduce((sum,i)=>sum+Number(i.paid||0),0))}</strong></td><td className="amount-cell"><strong>{money(monthlyInstallments.reduce((sum,i)=>sum+Number(i.balance||0),0))}</strong></td><td><span className="cell-sub">Paid: {monthlyInstallments.filter(i=>i.status==='Paid').length}</span><span className="cell-sub">Due: {monthlyInstallments.filter(i=>i.status==='Due').length}</span><span className="cell-sub">Overdue: {monthlyInstallments.filter(i=>i.status==='Overdue').length}</span><span className="cell-sub">Upcoming: {monthlyInstallments.filter(i=>i.status==='Upcoming').length}</span></td></tr></tfoot></table></div></Panel>}
       {section==='daily' && <Panel title="Daily charge breakdown" subtitle="Each Daily reservation is charged once for the full stay: nightly rate multiplied by the number of nights. The charge is due on check-in, and payments are allocated against the stay balance."><div className="mini-stat-grid"><div><span>{isVietnamese?"Tổng tiền phải thu theo ngày":"Daily total charges"}</span><strong>{money(dailyCharges.reduce((sum,i)=>sum+Number(i.charge||0),0))}</strong></div><div><span>{isVietnamese?"Tổng tiền đã thu theo ngày":"Daily total paid"}</span><strong>{money(dailyCharges.reduce((sum,i)=>sum+Number(i.paid||0),0))}</strong></div><div><span>{isVietnamese?"Công nợ theo ngày còn lại":"Daily outstanding balance"}</span><strong>{money(dailyCharges.reduce((sum,i)=>sum+Number(i.balance||0),0))}</strong></div></div><div className="table-scroll installment-breakdown-scroll"><table className="installment-breakdown-table"><thead><tr><th>DUE DATE</th><th>RESERVATION / GUEST</th><th>ROOM</th><th>CHARGE</th><th>ALLOCATED PAID</th><th>REMAINING</th><th>STATUS</th></tr></thead><tbody>
         {dailyCharges.map((i:any)=><tr key={`${i.reservationId}-${i.dueDate}`}><td>{i.dueDate}</td><td><strong>{i.reservationId}</strong><span className="cell-sub">{i.guest}</span></td><td>{i.room}</td><td className="amount-cell">{money(i.charge)}</td><td className="amount-cell">{money(i.paid)}</td><td className="amount-cell"><strong>{money(i.balance)}</strong></td><td><Badge tone={i.status==='Paid'?'success':i.status==='Overdue'?'warning':i.status==='Due'?'neutral':'info'}>{i.status}</Badge></td></tr>)}
         {!dailyCharges.length&&<tr><td colSpan={7}>No daily charges configured for this period and hotel.</td></tr>}
