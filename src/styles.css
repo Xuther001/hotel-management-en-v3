@@ -613,7 +613,8 @@ html[lang="vi"] {
 .reservation-mobile-sort,
 .billing-mobile-sort,
 .installment-mobile-sort,
-.daily-mobile-sort {
+.daily-mobile-sort,
+.payment-mobile-sort {
   display: none;
 }
 
@@ -622,7 +623,8 @@ html[lang="vi"] {
   .reservation-mobile-sort,
   .billing-mobile-sort,
   .installment-mobile-sort,
-  .daily-mobile-sort {
+  .daily-mobile-sort,
+  .payment-mobile-sort {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: 9px;
@@ -631,7 +633,8 @@ html[lang="vi"] {
 
   .billing-mobile-sort label,
   .installment-mobile-sort label,
-  .daily-mobile-sort label {
+  .daily-mobile-sort label,
+  .payment-mobile-sort label {
     display: flex;
     flex-direction: column;
     gap: 5px;
@@ -642,7 +645,8 @@ html[lang="vi"] {
 
   .billing-mobile-sort select,
   .installment-mobile-sort select,
-  .daily-mobile-sort select {
+  .daily-mobile-sort select,
+  .payment-mobile-sort select {
     width: 100%;
     min-width: 0;
     border: 1px solid #dfe5ee;
@@ -1958,36 +1962,46 @@ html[lang="vi"] {
   /* Payment history */
   .payment-history-table tbody td:nth-child(1),
   .payment-history-table tbody td:nth-child(2),
+  .payment-history-table tbody td:nth-child(3),
   .payment-history-table tbody td:nth-child(4),
-  .payment-history-table tbody td:nth-child(6) {
+  .payment-history-table tbody td:nth-child(6),
+  .payment-history-table tbody td:nth-child(8) {
     grid-column: 1 / -1;
   }
 
   .payment-history-table tbody td:nth-child(1)::before {
-    content: var(--mobile-date-payment, "Date / payment");
+    content: var(--mobile-due-date, "Date");
   }
 
   .payment-history-table tbody td:nth-child(2)::before {
-    content: var(--mobile-reservation-guest, "Reservation / guest");
+    content: "Payment ID";
   }
 
   .payment-history-table tbody td:nth-child(3)::before {
-    content: var(--mobile-method, "Method");
+    content: "Reservation";
   }
 
   .payment-history-table tbody td:nth-child(4)::before {
-    content: var(--mobile-notes, "Notes");
+    content: var(--mobile-guest, "Guest");
   }
 
   .payment-history-table tbody td:nth-child(5)::before {
-    content: var(--mobile-amount, "Amount");
+    content: var(--mobile-method, "Method");
   }
 
   .payment-history-table tbody td:nth-child(6)::before {
+    content: var(--mobile-notes, "Notes");
+  }
+
+  .payment-history-table tbody td:nth-child(7)::before {
+    content: var(--mobile-amount, "Amount");
+  }
+
+  .payment-history-table tbody td:nth-child(8)::before {
     content: var(--mobile-actions, "Actions");
   }
 
-  .payment-history-table tbody td:nth-child(6) {
+  .payment-history-table tbody td:nth-child(8) {
     display: flex;
     align-items: center;
     flex-wrap: wrap;

@@ -1817,6 +1817,8 @@ function Finance({section = 'billing', property = 'all'}: {section?: 'billing'|'
   const [installmentSortDirection, setInstallmentSortDirection] = useState<'asc'|'desc'>('asc');
   const [dailySortColumn, setDailySortColumn] = useState('dueDate');
   const [dailySortDirection, setDailySortDirection] = useState<'asc'|'desc'>('asc');
+  const [paymentSortColumn, setPaymentSortColumn] = useState('date');
+  const [paymentSortDirection, setPaymentSortDirection] = useState<'asc'|'desc'>('desc');
   const [billingPage, setBillingPage] = useState(1);
   const billingRegisterRef = useRef<HTMLDivElement | null>(null);
   const billingTableScreenPosition = useRef<number | null>(null);
@@ -2036,6 +2038,33 @@ function Finance({section = 'billing', property = 'all'}: {section?: 'billing'|'
     ? paymentRows
     : paymentRows.filter(p=>inPeriod(String(p.date||''))))
     .filter(p=>!(Boolean(p.effectiveDate) && p.effectiveDate > (period === 'all' ? today : cutoffDate)));
+  const sortedPayments = [...paymentsInPeriod].sort((a:any, b:any) => {
+    let comparison = 0;
+    switch (paymentSortColumn) {
+      case 'date':
+        comparison = String(a.date || '').localeCompare(String(b.date || ''));
+        break;
+      case 'paymentId':
+        comparison = String(a.id || '').localeCompare(String(b.id || ''), undefined, { numeric: true, sensitivity: 'base' });
+        break;
+      case 'reservation':
+        comparison = String(a.reservationId || '').localeCompare(String(b.reservationId || ''), undefined, { numeric: true, sensitivity: 'base' });
+        break;
+      case 'guest':
+        comparison = String(a.guest || '').localeCompare(String(b.guest || ''), undefined, { sensitivity: 'base' });
+        break;
+      case 'method':
+        comparison = String(a.method || '').localeCompare(String(b.method || ''), undefined, { sensitivity: 'base' });
+        break;
+      case 'notes':
+        comparison = String(a.notes || '').localeCompare(String(b.notes || ''), undefined, { sensitivity: 'base' });
+        break;
+      case 'amount':
+        comparison = Number(a.amount || 0) - Number(b.amount || 0);
+        break;
+    }
+    return paymentSortDirection === 'asc' ? comparison : -comparison;
+  });
   const chargesInPeriod = period === 'all' ? 0 : bills.reduce((sum,r)=>
     sum+(r.installments||[]).filter((i:any)=>inPeriod(String(i.dueDate||'')))
       .reduce((sub:number,i:any)=>sub+Number(i.charge||0),0),0);
@@ -2373,6 +2402,22 @@ function Finance({section = 'billing', property = 'all'}: {section?: 'billing'|'
     </th>
   );
 
+  const paymentSortHeader = (column: string, label: string) => (
+    <th
+      aria-sort={paymentSortColumn === column ? (paymentSortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
+      onClick={() => {
+        if (paymentSortColumn === column) {
+          setPaymentSortDirection(current => current === 'asc' ? 'desc' : 'asc');
+        } else {
+          setPaymentSortColumn(column);
+          setPaymentSortDirection(column === 'date' ? 'desc' : 'asc');
+        }
+      }}
+    >
+      {label} <span aria-hidden="true">{paymentSortColumn === column ? (paymentSortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
+    </th>
+  );
+
   const billingFeeBreakdown = historicalBills.reduce((totals, r) => {
     const installments = (r.installments || []).filter((i: any) =>
       period === 'all' || inPeriod(String(i.dueDate || ''))
@@ -2636,13 +2681,33 @@ function Finance({section = 'billing', property = 'all'}: {section?: 'billing'|'
         {sortedDailyCharges.map((i:any)=><tr key={`${i.reservationId}-${i.dueDate}`}><td>{i.dueDate}</td><td><strong>{i.reservationId}</strong></td><td>{i.guest}</td><td>{i.room}</td><td className="amount-cell">{money(i.charge)}</td><td className="amount-cell">{money(i.paid)}</td><td className="amount-cell"><strong>{money(i.balance)}</strong></td><td><Badge tone={i.status==='Paid'?'success':i.status==='Overdue'?'warning':i.status==='Due'?'neutral':'info'}>{i.status}</Badge></td></tr>)}
         {!dailyCharges.length&&<tr><td colSpan={8}>No daily charges configured for this period and hotel.</td></tr>}
       </tbody><tfoot><tr className="installment-total-row"><td><strong>TOTAL</strong></td><td><strong>{dailyCharges.length} reservations</strong></td><td>—</td><td>—</td><td className="amount-cell"><strong>{money(dailyCharges.reduce((sum,i)=>sum+Number(i.charge||0),0))}</strong></td><td className="amount-cell"><strong>{money(dailyCharges.reduce((sum,i)=>sum+Number(i.paid||0),0))}</strong></td><td className="amount-cell"><strong>{money(dailyCharges.reduce((sum,i)=>sum+Number(i.balance||0),0))}</strong></td><td><span className="cell-sub">Paid: {dailyCharges.filter(i=>i.status==='Paid').length}</span><span className="cell-sub">Due: {dailyCharges.filter(i=>i.status==='Due').length}</span><span className="cell-sub">Overdue: {dailyCharges.filter(i=>i.status==='Overdue').length}</span><span className="cell-sub">Upcoming: {dailyCharges.filter(i=>i.status==='Upcoming').length}</span></td></tr></tfoot></table></div></Panel>}
-      {section==='payments' && <Panel title="Payment history" subtitle="Actual recorded payments; existing bookings have no assumed payments."><div className="table-scroll payment-history-scroll"><table className="payment-history-table"><thead><tr><th>DATE / PAYMENT</th><th>RESERVATION</th><th>METHOD</th><th>NOTES</th><th>AMOUNT</th><th>ACTIONS</th></tr></thead><tbody>
-        {paymentsInPeriod.sort((a,b)=>String(b.date).localeCompare(String(a.date))).map((p:AnyRow)=><tr key={p.id}><td><strong>{p.date}</strong><span className="cell-sub">{p.id}</span>{p.effectiveDate&&p.effectiveDate!==p.date&&<span className="cell-sub">Effective {p.effectiveDate}</span>}</td><td>{p.reservationId}<span className="payment-guest-name">{p.guest}</span></td><td>{p.method}</td><td>{p.notes||'—'}</td><td className="amount-cell">{money(p.amount)}{p.monthlyFeeBreakdown
+      {section==='payments' && <Panel title="Payment history" subtitle="Actual recorded payments; existing bookings have no assumed payments.">
+        <div className="payment-mobile-sort">
+          <label>{isVietnamese ? "Sắp xếp theo" : "Sort by"}
+            <select value={paymentSortColumn} onChange={e => setPaymentSortColumn(e.target.value)}>
+              <option value="date">{isVietnamese ? "Ngày thanh toán" : "Date"}</option>
+              <option value="paymentId">{isVietnamese ? "Mã thanh toán" : "Payment ID"}</option>
+              <option value="reservation">{isVietnamese ? "Mã đặt phòng" : "Reservation"}</option>
+              <option value="guest">{isVietnamese ? "Tên khách" : "Guest"}</option>
+              <option value="method">{isVietnamese ? "Phương thức" : "Method"}</option>
+              <option value="notes">{isVietnamese ? "Ghi chú" : "Notes"}</option>
+              <option value="amount">{isVietnamese ? "Số tiền" : "Amount"}</option>
+            </select>
+          </label>
+          <label>{isVietnamese ? "Thứ tự" : "Order"}
+            <select value={paymentSortDirection} onChange={e => setPaymentSortDirection(e.target.value as 'asc'|'desc')}>
+              <option value="asc">{isVietnamese ? "Tăng dần" : "Ascending"}</option>
+              <option value="desc">{isVietnamese ? "Giảm dần" : "Descending"}</option>
+            </select>
+          </label>
+        </div>
+        <div className="table-scroll payment-history-scroll"><table className="payment-history-table"><thead><tr>{paymentSortHeader('date', 'DATE')}{paymentSortHeader('paymentId', 'PAYMENT ID')}{paymentSortHeader('reservation', 'RESERVATION')}{paymentSortHeader('guest', 'GUEST')}{paymentSortHeader('method', 'METHOD')}{paymentSortHeader('notes', 'NOTES')}{paymentSortHeader('amount', 'AMOUNT')}<th>ACTIONS</th></tr></thead><tbody>
+        {sortedPayments.map((p:AnyRow)=><tr key={p.id}><td><strong>{p.date}</strong>{p.effectiveDate&&p.effectiveDate!==p.date&&<span className="cell-sub">Effective {p.effectiveDate}</span>}</td><td>{p.id}</td><td>{p.reservationId}</td><td><span className="payment-guest-name">{p.guest}</span></td><td>{p.method}</td><td>{p.notes||'—'}</td><td className="amount-cell">{money(p.amount)}{p.monthlyFeeBreakdown
           ? <span className="cell-sub">Rent {money(p.rentAmount)} · Management {money(p.managementFee)} · Water {money(p.waterFee)} · Electricity {money(p.electricityFee||0)}</span>
           : Number(p.electricityFee||0)>0
             ? <span className="cell-sub">Electricity {money(p.electricityFee)}</span>
             : null}{Number(p.discount||0)>0&&<span className="cell-sub">Discount {money(p.discount)}</span>}{Number(p.otherCharges||0)>0&&<span className="cell-sub">Other charges {money(p.otherCharges)}</span>}</td><td><button type="button" className="reservation-edit-btn" onClick={()=>{setSelectedPayment(p);setError('');setModal('editPayment');}}>Edit</button><span className="payment-delete-button"><Button variant="secondary" onClick={()=>deletePayment(p)}>Delete</Button></span></td></tr>)}
-        {!paymentsInPeriod.length&&<tr><td colSpan={6}>No payments recorded in this period.</td></tr>}
+        {!paymentsInPeriod.length&&<tr><td colSpan={8}>No payments recorded in this period.</td></tr>}
       </tbody></table></div></Panel>}
     </>}
     {open&&<Modal title="Record an expense" onClose={()=>setOpen(false)}><form className="form-grid" onSubmit={submit}><label className="span-2">Description<input name="description" required placeholder="What was purchased or paid for?"/></label><label>Category<select name="category"><option>Utilities</option><option>Supplies</option><option>Maintenance</option><option>Payroll</option><option>Marketing</option><option>Other</option></select></label><label>Business unit<select name="property"><option>Hotel A</option><option>Hotel B</option></select></label><label>Amount (VND)<input type="number" name="amount" min="1" required/></label><label>Date<input type="date" name="date" defaultValue={today}/></label><div className="form-actions span-2"><Button variant="secondary" onClick={()=>setOpen(false)}>Cancel</Button><Button type="submit">Save expense</Button></div></form></Modal>}
