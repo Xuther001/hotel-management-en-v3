@@ -1805,6 +1805,8 @@ function Finance({section = 'billing', property = 'all'}: {section?: 'billing'|'
   const [roomChargeError,setRoomChargeError] = useState('');
   const [query,setQuery] = useState('');
   const [billingStatusFilter, setBillingStatusFilter] = useState('Overdue');
+  const [billingSortColumn, setBillingSortColumn] = useState('dueDate');
+  const [billingSortDirection, setBillingSortDirection] = useState<'asc'|'desc'>('asc');
   const [billingPage, setBillingPage] = useState(1);
   const billingRegisterRef = useRef<HTMLDivElement | null>(null);
   const billingTableScreenPosition = useRef<number | null>(null);
@@ -1821,7 +1823,7 @@ function Finance({section = 'billing', property = 'all'}: {section?: 'billing'|'
   const [error,setError] = useState('');
   const [period,setPeriod] = useState(() => new Date().toISOString().slice(0,7));
   const today = new Date().toISOString().slice(0,10);
-  useEffect(() => { setBillingPage(1); }, [period, billingStatusFilter, property]);
+  useEffect(() => { setBillingPage(1); }, [period, billingStatusFilter, property, billingSortColumn, billingSortDirection]);
   useLayoutEffect(() => {
     if (billingTableScreenPosition.current === null) return;
     const currentTop = billingRegisterRef.current?.getBoundingClientRect().top;
@@ -2199,10 +2201,73 @@ function Finance({section = 'billing', property = 'all'}: {section?: 'billing'|'
       .map((i:any)=>({...i,reservationId:r.reservationId,guest:r.guest,room:r.room})))
     .sort((a,b)=>String(a.dueDate).localeCompare(String(b.dueDate)));
   const filteredBillingRows = historicalBills.filter(r => billingStatusFilter === 'All' || r.status === billingStatusFilter);
-  const billingTotalPages = Math.max(1, Math.ceil(filteredBillingRows.length / BILLING_PAGE_SIZE));
-  const paginatedBillingRows = filteredBillingRows.slice((billingPage - 1) * BILLING_PAGE_SIZE, billingPage * BILLING_PAGE_SIZE);
-  const billingFirstRow = filteredBillingRows.length ? (billingPage - 1) * BILLING_PAGE_SIZE + 1 : 0;
-  const billingLastRow = Math.min(billingPage * BILLING_PAGE_SIZE, filteredBillingRows.length);
+  const sortedBillingRows = [...filteredBillingRows].sort((a, b) => {
+    let comparison = 0;
+    switch (billingSortColumn) {
+      case 'reservation':
+        comparison = String(a.guest || '').localeCompare(String(b.guest || ''), undefined, { sensitivity: 'base' })
+          || String(a.reservationId || '').localeCompare(String(b.reservationId || ''), undefined, { numeric: true, sensitivity: 'base' });
+        break;
+      case 'room':
+        comparison = String(a.room || '').localeCompare(String(b.room || ''), undefined, { numeric: true, sensitivity: 'base' });
+        break;
+      case 'type':
+        comparison = String(a.rentalType || '').localeCompare(String(b.rentalType || ''), undefined, { sensitivity: 'base' });
+        break;
+      case 'stay':
+        comparison = String(a.checkIn || '').localeCompare(String(b.checkIn || ''))
+          || String(a.checkOut || '').localeCompare(String(b.checkOut || ''));
+        break;
+      case 'rent':
+        comparison = Number(a.rentCharge ?? a.charge ?? 0) - Number(b.rentCharge ?? b.charge ?? 0);
+        break;
+      case 'water':
+        comparison = Number(a.waterCharge || 0) - Number(b.waterCharge || 0);
+        break;
+      case 'management':
+        comparison = Number(a.managementCharge || 0) - Number(b.managementCharge || 0);
+        break;
+      case 'paid':
+        comparison = Number(a.paid || 0) - Number(b.paid || 0);
+        break;
+      case 'balance':
+        comparison = Number(a.balance || 0) - Number(b.balance || 0);
+        break;
+      case 'dueNow':
+        comparison = Number(a.dueNow || 0) - Number(b.dueNow || 0);
+        break;
+      case 'overdue':
+        comparison = Number(a.overdueAmount || 0) - Number(b.overdueAmount || 0);
+        break;
+      case 'dueDate':
+        comparison = String(a.dueDate || '').localeCompare(String(b.dueDate || ''));
+        break;
+      case 'status':
+        comparison = String(a.status || '').localeCompare(String(b.status || ''), undefined, { sensitivity: 'base' });
+        break;
+    }
+    return billingSortDirection === 'asc' ? comparison : -comparison;
+  });
+  const billingTotalPages = Math.max(1, Math.ceil(sortedBillingRows.length / BILLING_PAGE_SIZE));
+  const paginatedBillingRows = sortedBillingRows.slice((billingPage - 1) * BILLING_PAGE_SIZE, billingPage * BILLING_PAGE_SIZE);
+  const billingFirstRow = sortedBillingRows.length ? (billingPage - 1) * BILLING_PAGE_SIZE + 1 : 0;
+  const billingLastRow = Math.min(billingPage * BILLING_PAGE_SIZE, sortedBillingRows.length);
+
+  const billingSortHeader = (column: string, label: string) => (
+    <th
+      aria-sort={billingSortColumn === column ? (billingSortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
+      onClick={() => {
+        if (billingSortColumn === column) {
+          setBillingSortDirection(current => current === 'asc' ? 'desc' : 'asc');
+        } else {
+          setBillingSortColumn(column);
+          setBillingSortDirection('asc');
+        }
+      }}
+    >
+      {label} <span aria-hidden="true">{billingSortColumn === column ? (billingSortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
+    </th>
+  );
 
   const billingFeeBreakdown = historicalBills.reduce((totals, r) => {
     const installments = (r.installments || []).filter((i: any) =>
@@ -2367,7 +2432,35 @@ function Finance({section = 'billing', property = 'all'}: {section?: 'billing'|'
           </div>
         </div>
       </Panel>
-      <Panel title={isVietnamese?"Sổ công nợ khách":"Guest billing register"} subtitle={isVietnamese?"Thiết lập công nợ và thanh toán được lưu riêng với thông tin đặt phòng.":"Billing settings and payments are stored separately from reservations."}><div ref={billingRegisterRef} className="table-scroll billing-register-scroll"><table className="billing-register-table"><thead><tr><th>{isVietnamese ? "ĐẶT PHÒNG / KHÁCH" : "RESERVATION / GUEST"}</th><th>{isVietnamese ? "PHÒNG" : "ROOM"}</th><th>{isVietnamese ? "LOẠI LƯU TRÚ" : "TYPE"}</th><th>{isVietnamese ? "THỜI GIAN LƯU TRÚ" : "STAY"}</th><th>{isVietnamese ? "TIỀN THUÊ" : "RENT"}</th><th>{isVietnamese ? "TIỀN NƯỚC" : "WATER"}</th><th>{isVietnamese ? "PHÍ QUẢN LÝ" : "MANAGEMENT"}</th><th>{isVietnamese ? "ĐÃ THANH TOÁN" : "PAID"}</th><th>{isVietnamese ? "SỐ DƯ CÒN LẠI" : "BALANCE"}</th><th>{isVietnamese ? "ĐẾN HẠN HIỆN TẠI" : "DUE NOW"}</th><th>{isVietnamese ? "QUÁ HẠN" : "OVERDUE"}</th><th>{isVietnamese ? "NGÀY ĐẾN HẠN CHƯA THANH TOÁN CŨ NHẤT" : "OLDEST UNPAID DUE DATE"}</th><th>{isVietnamese ? "TRẠNG THÁI" : "STATUS"}</th><th>{isVietnamese ? "THAO TÁC" : "ACTIONS"}</th></tr></thead><tbody>
+      <Panel title={isVietnamese?"Sổ công nợ khách":"Guest billing register"} subtitle={isVietnamese?"Thiết lập công nợ và thanh toán được lưu riêng với thông tin đặt phòng.":"Billing settings and payments are stored separately from reservations."}>
+        <div className="billing-mobile-sort">
+          <label>
+            <span>{isVietnamese ? "Sắp xếp theo" : "Sort by"}</span>
+            <select value={billingSortColumn} onChange={e => setBillingSortColumn(e.target.value)}>
+              <option value="reservation">{isVietnamese ? "Đặt phòng / Khách" : "Reservation / Guest"}</option>
+              <option value="room">{isVietnamese ? "Phòng" : "Room"}</option>
+              <option value="type">{isVietnamese ? "Loại lưu trú" : "Type"}</option>
+              <option value="stay">{isVietnamese ? "Thời gian lưu trú" : "Stay"}</option>
+              <option value="rent">{isVietnamese ? "Tiền thuê" : "Rent"}</option>
+              <option value="water">{isVietnamese ? "Tiền nước" : "Water"}</option>
+              <option value="management">{isVietnamese ? "Phí quản lý" : "Management"}</option>
+              <option value="paid">{isVietnamese ? "Đã thanh toán" : "Paid"}</option>
+              <option value="balance">{isVietnamese ? "Số dư còn lại" : "Balance"}</option>
+              <option value="dueNow">{isVietnamese ? "Đến hạn hiện tại" : "Due now"}</option>
+              <option value="overdue">{isVietnamese ? "Quá hạn" : "Overdue"}</option>
+              <option value="dueDate">{isVietnamese ? "Ngày đến hạn cũ nhất" : "Oldest unpaid due date"}</option>
+              <option value="status">{isVietnamese ? "Trạng thái" : "Status"}</option>
+            </select>
+          </label>
+          <label>
+            <span>{isVietnamese ? "Thứ tự" : "Order"}</span>
+            <select value={billingSortDirection} onChange={e => setBillingSortDirection(e.target.value as 'asc'|'desc')}>
+              <option value="asc">{isVietnamese ? "Tăng dần" : "Ascending"}</option>
+              <option value="desc">{isVietnamese ? "Giảm dần" : "Descending"}</option>
+            </select>
+          </label>
+        </div>
+        <div ref={billingRegisterRef} className="table-scroll billing-register-scroll"><table className="billing-register-table"><thead><tr>{billingSortHeader('reservation', isVietnamese ? "ĐẶT PHÒNG / KHÁCH" : "RESERVATION / GUEST")}{billingSortHeader('room', isVietnamese ? "PHÒNG" : "ROOM")}{billingSortHeader('type', isVietnamese ? "LOẠI LƯU TRÚ" : "TYPE")}{billingSortHeader('stay', isVietnamese ? "THỜI GIAN LƯU TRÚ" : "STAY")}{billingSortHeader('rent', isVietnamese ? "TIỀN THUÊ" : "RENT")}{billingSortHeader('water', isVietnamese ? "TIỀN NƯỚC" : "WATER")}{billingSortHeader('management', isVietnamese ? "PHÍ QUẢN LÝ" : "MANAGEMENT")}{billingSortHeader('paid', isVietnamese ? "ĐÃ THANH TOÁN" : "PAID")}{billingSortHeader('balance', isVietnamese ? "SỐ DƯ CÒN LẠI" : "BALANCE")}{billingSortHeader('dueNow', isVietnamese ? "ĐẾN HẠN HIỆN TẠI" : "DUE NOW")}{billingSortHeader('overdue', isVietnamese ? "QUÁ HẠN" : "OVERDUE")}{billingSortHeader('dueDate', isVietnamese ? "NGÀY ĐẾN HẠN CHƯA THANH TOÁN CŨ NHẤT" : "OLDEST UNPAID DUE DATE")}{billingSortHeader('status', isVietnamese ? "TRẠNG THÁI" : "STATUS")}<th>{isVietnamese ? "THAO TÁC" : "ACTIONS"}</th></tr></thead><tbody>
          {paginatedBillingRows.map(r=><tr key={r.reservationId}><td><strong>{r.reservationId}</strong><span className="cell-sub">{r.guest}</span><details className="billing-mobile-details"><summary>{isVietnamese ? "Xem chi tiết" : "View details"}</summary><div className="billing-mobile-detail-content"><span><strong>Stay:</strong> {r.checkIn} to {r.checkOut}</span><span><strong>Overdue:</strong> {money(r.overdueAmount)}</span><span><strong>Oldest unpaid due date:</strong> {r.dueDate || '—'}</span></div></details></td><td className="billing-room-number">{r.room}</td><td>{r.rentalType}{r.rentalType==='Monthly'&&r.monthlyRate>0?<span className="cell-sub">{money(r.monthlyRate)}/month</span>:null}</td><td>{r.checkIn}<span className="cell-sub">to {r.checkOut}</span></td><td className="amount-cell">{money(r.rentCharge ?? r.charge)}</td><td className="amount-cell">{r.rentalType==='Monthly'?money(r.waterCharge):'—'}</td><td className="amount-cell">{r.rentalType==='Monthly'?money(r.managementCharge):'—'}</td><td className="amount-cell">{money(r.paid)}</td><td className="amount-cell"><strong>{money(r.balance)}</strong></td><td className="amount-cell">{money(r.dueNow)}</td><td className="amount-cell">{money(r.overdueAmount)}</td><td>{r.dueDate}</td><td><Badge tone={r.status==='Paid'?'success':r.status==='Overdue'||r.status==='Setup needed'?'warning':'neutral'}>{r.status}</Badge></td><td><div className="table-actions"><Button variant="secondary" onClick={()=>{setSelected(r);setConfigRentalType(r.rentalType==='Monthly'?'Monthly':'Daily');setError('');setModal('configure');}}> {isVietnamese?"Thiết lập":"Configure"}</Button><Button onClick={()=>{setSelected(r);setError('');setModal('payment');}} disabled={r.status==='Setup needed'||Number(r.balance||0)<=0}>{isVietnamese?"Ghi nhận thanh toán":"Record payment"}</Button></div></td></tr>)}
         {!filteredBillingRows.length&&<tr><td colSpan={14}>{isVietnamese?"Không có khoản công nợ nào thuộc trạng thái này.":"No billing entries for this status."}</td></tr>}
       </tbody></table></div>
