@@ -2293,7 +2293,7 @@ function Finance({section = 'billing', property = 'all', userId}: {section?: 'bi
       : balance<=0 ? 'Paid'
       : overdueAmount>0 ? 'Overdue' : 'Due';
     return {
-      ...r, charge, rentCharge, paid, balance, dueNow:charge, overdueAmount,
+      ...r, charge, rentCharge, paid, balance:totalBalance, dueNow:balance, overdueAmount,
       dueDate:dueInstallments.find((i:any)=>Number(i.balance||0)>0)?.dueDate
         || dueInstallments[0]?.dueDate || r.checkIn,
       status,
