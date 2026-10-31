@@ -2082,6 +2082,7 @@ function Finance({section = 'billing', property = 'all'}: {section?: 'billing'|'
     const charge = dueInstallments.reduce((sum:number,i:any)=>sum+Number(i.charge||0),0);
     const rentCharge = dueInstallments.reduce((sum:number,i:any)=>sum+Number(i.rentCharge ?? i.charge ?? 0),0);
     const balance = dueInstallments.reduce((sum:number,i:any)=>sum+Number(i.balance||0),0);
+    const totalBalance = installments.reduce((sum:number,i:any)=>sum+Number(i.balance||0),0);
     const overdueAmount = dueInstallments.reduce((sum:number,i:any)=>{
       if (Number(i.balance||0)<=0) return sum;
       const due = String(i.dueDate||'');
@@ -2145,6 +2146,77 @@ function Finance({section = 'billing', property = 'all'}: {section?: 'billing'|'
   const paginatedBillingRows = filteredBillingRows.slice((billingPage - 1) * BILLING_PAGE_SIZE, billingPage * BILLING_PAGE_SIZE);
   const billingFirstRow = filteredBillingRows.length ? (billingPage - 1) * BILLING_PAGE_SIZE + 1 : 0;
   const billingLastRow = Math.min(billingPage * BILLING_PAGE_SIZE, filteredBillingRows.length);
+
+  const billingFeeBreakdown = historicalBills.reduce((totals, r) => {
+    const installments = (r.installments || []).filter((i: any) =>
+      period === 'all' || inPeriod(String(i.dueDate || ''))
+    );
+    const payments = (r.payments || []).filter((p: any) => {
+      const effectiveDate = String(p.effectiveDate || p.date || '');
+      return effectiveDate <= (period === 'all' ? today : cutoffDate)
+        && (period === 'all' || String(p.date || '') <= cutoffDate);
+    });
+
+    const adjustments = new Map<string, { discount: number; otherCharges: number }>();
+
+    for (const payment of payments) {
+      const effectiveDate = String(payment.effectiveDate || payment.date || '');
+      const eligible = (r.installments || [])
+        .filter((i: any) => String(i.dueDate || '') <= effectiveDate)
+        .sort((a: any, b: any) =>
+          String(a.dueDate || '').localeCompare(String(b.dueDate || ''))
+        );
+      const target = eligible[eligible.length - 1];
+      if (!target) continue;
+
+      const key = String(target.dueDate || '');
+      const current = adjustments.get(key) || { discount: 0, otherCharges: 0 };
+      current.discount += Math.max(0, Number(payment.discount || 0));
+      current.otherCharges += Math.max(0, Number(payment.otherCharges || 0));
+      adjustments.set(key, current);
+    }
+
+    for (const installment of installments) {
+      const adjustment = adjustments.get(String(installment.dueDate || ''))
+        || { discount: 0, otherCharges: 0 };
+      const electricity = Math.max(0, Number(installment.electricityCharge || 0));
+      const isMonthly = r.rentalType === 'Monthly';
+
+      const water = isMonthly
+        ? Math.max(0, Number(r.guests || 0)) * 100000
+        : 0;
+      const management = isMonthly ? 300000 : 0;
+
+      const rent = isMonthly && installment.rentCharge != null
+        ? Math.max(0, Number(installment.rentCharge || 0))
+        : Math.max(
+            0,
+            Number(installment.charge || 0)
+              - electricity
+              - adjustment.otherCharges
+              + adjustment.discount
+              - water
+              - management
+          );
+
+      totals.rent += rent;
+      totals.water += water;
+      totals.management += management;
+      totals.electricity += electricity;
+      totals.discounts += adjustment.discount;
+      totals.otherCharges += adjustment.otherCharges;
+    }
+
+    return totals;
+  }, {
+    rent: 0,
+    water: 0,
+    management: 0,
+    electricity: 0,
+    discounts: 0,
+    otherCharges: 0
+  });
+
   return <>
     <PageHeader eyebrow="FINANCE" title={isVietnamese?(section==='billing'?'Sổ công nợ khách':section==='installments'?'Chi tiết các đợt thanh toán hàng tháng':section==='daily'?'Chi tiết công nợ theo ngày':section==='payments'?'Lịch sử thanh toán':'Chi phí'):(section==='billing'?'Guest billing register':section==='installments'?'Monthly installment breakdown':section==='daily'?'Daily charge breakdown':section==='payments'?'Payment history':'Expenses')} description={isVietnamese?"Quản lý các khoản phải thu của khách, lịch thanh toán theo đợt, các khoản đã thu và chi phí hoạt động.":"Manage guest charges, installment schedules, recorded payments, and operating expenses."} actions={section==='expenses'?<Button onClick={()=>setOpen(true)}><Plus size={16}/> Record expense</Button>:undefined}/>
     <div className="toolbar finance-period-toolbar">
@@ -2180,6 +2252,14 @@ function Finance({section = 'billing', property = 'all'}: {section?: 'billing'|'
           <div><span>{isVietnamese?"Số tài khoản quá hạn":"Overdue accounts"}</span><strong>{historicalBills.filter(r=>r.overdueAmount>0).length}</strong></div>
         </div>
       )}
+      <div className="mini-stat-grid">
+        <div><span>{isVietnamese?"Tiền thuê":"Rent charges"}</span><strong>{money(billingFeeBreakdown.rent)}</strong></div>
+        <div><span>{isVietnamese?"Tiền nước":"Water charges"}</span><strong>{money(billingFeeBreakdown.water)}</strong></div>
+        <div><span>{isVietnamese?"Phí quản lý":"Management fees"}</span><strong>{money(billingFeeBreakdown.management)}</strong></div>
+        <div><span>{isVietnamese?"Tiền điện":"Electricity charges"}</span><strong>{money(billingFeeBreakdown.electricity)}</strong></div>
+        <div><span>{isVietnamese?"Giảm giá":"Discounts"}</span><strong>{money(billingFeeBreakdown.discounts)}</strong></div>
+        <div><span>{isVietnamese?"Các khoản phụ thu khác":"Other charges"}</span><strong>{money(billingFeeBreakdown.otherCharges)}</strong></div>
+      </div>
       <Panel title={isVietnamese?"Thanh toán có hiệu lực trong tương lai":"Advanced payment"} subtitle={isVietnamese?"Các khoản đã nhận tiền nhưng được lên lịch có hiệu lực trong tương lai. Những khoản này chưa được tính vào thanh toán có hiệu lực hoặc công nợ hiện tại.":"Payments received but scheduled to take effect in the future. These are excluded from payments recorded this period and from the current outstanding-balance calculation."}>
         <div className="table-scroll">
           <table>
